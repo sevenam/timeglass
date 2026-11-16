@@ -14,6 +14,8 @@
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="Microsoft.AspNetCore.OpenApi" Version="10.0.15" />
     <PackageVersion Include="Microsoft.Extensions.FileProviders.Embedded" Version="11.0.0" />
+    <!-- Installer and auto-update (#40). Keep the same version as the vpk tool in dotnet-tools.json. -->
+    <PackageVersion Include="Velopack" Version="1.2.161" />
   </ItemGroup>
   <ItemGroup Label="Build tools">
     <!-- Versions every assembly from the latest v* git tag (#38). -->

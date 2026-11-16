@@ -384,22 +384,28 @@ so a missing registration fails at startup and in `Timeglass.App.Tests`.
 
 Startup, in `Program.Main` on the STA main thread:
 
+0. **Installer hooks.** `VelopackApp.Run()` comes first: the setup program and the updater
+   start the exe with their own arguments to run a hook, and expect it to exit at once (see
+   _Installing and updating_). A normal start falls through.
 1. **Single instance.** A named mutex in the session's `Local\` namespace. If another instance
    holds it, this launch sends `activate` over a named pipe (current user only, named per
-   session) and exits; the running instance opens the dashboard.
+   session) and exits; the running instance opens the dashboard. The first instance then
+   installs a downloaded update, if one is waiting, and exits for the updater to restart it.
 2. **Host start.** Resolving the services opens the database (migrations, crash recovery) and
    creates the Windows sources. The session source is resolved on the main thread first, so
    `SystemEvents` delivers its events through the tray's message loop. `TrackingController`, a
    hosted service, starts the `TrackingService` run.
 3. **Tray.** `TrayApplicationContext` shows a `NotifyIcon` with _Open dashboard_,
    _Pause tracking_ (for 30 minutes, an hour, until midnight or until resumed; _Resume tracking_
-   while paused), _Start with Windows_, _Settings_ (#22), _Open log folder_ and _Quit_, and
+   while paused), _Start with Windows_, _Settings_ (#22), _Open log folder_, _About_,
+   _Restart to update_ (only once a new version is downloaded) and _Quit_, and
    `Application.Run` pumps messages until Quit or the host stops. The tooltip shows today's
    active time, refreshed every 30 s. _Start with Windows_ is a value in the current user's
    `Run` key (`AutostartRegistration` in `Timeglass.Windows`), which also honours the
    _disabled_ flag Task Manager writes under `StartupApproved\Run`. It is not in
    `settings.json`: the check mark is read from the registry each time the menu opens, so it
-   can't drift.
+   can't drift. The value holds `TimeglassHost.AutostartExecutable`: the running exe, or the
+   installer's launcher for an installed copy.
 4. **Shutdown.** After the message loop ends, the host is stopped and disposed off the UI
    thread: tracking closes the open interval and flushes, and the repository drains its queue.
    On logoff or shutdown the same flush already happened in the `ShuttingDown` handler, since
@@ -412,6 +418,55 @@ a restart.
 `ApiServer`, a hosted service started after tracking and stopped before it, runs the API
 (see _API security_) with the app's `IntervalRepository`, `TrackingController` (as
 `ITrackingState`) and clock, and writes the runtime file.
+
+### Installing and updating
+
+Releases carry a setup exe built with Velopack (#40,
+[ADR 0006](adr/0006-velopack-installer-and-updates.md)). `src/Timeglass.App/Updates` is all the
+app knows about it; Core, Storage and Api don't.
+
+```text
+%LOCALAPPDATA%\sevenam.Timeglass\      the install folder, named after the package id
+  Timeglass.exe                        launcher: starts current\Timeglass.exe; its path never changes
+  Update.exe                           Velopack's updater
+  current\                             the app, replaced as a whole by an update
+  packages\                            downloaded versions
+%LOCALAPPDATA%\Timeglass\              database, settings, logs: never touched by setup, update or uninstall
+```
+
+- **Installed or not.** Only a copy the setup program installed updates itself
+  (`IAppUpdater.IsInstalled`). The zip's exe and a build from source run the same code and do
+  nothing: no check, no network.
+- **Check and download.** `UpdateService`, the last hosted service, asks 30 s after start and
+  then every 24 h, measured on the wall clock it looks at hourly, so a check that came due
+  during sleep runs after waking. A failed check (offline) is logged and retried at the next
+  look. `VelopackUpdater` asks GitHub for the repository's releases, reads
+  `releases.win.json` from them and downloads the delta packages from the installed version to
+  the newest, or the full package when the deltas can't be used. A stable build
+  ignores pre-releases; a pre-release build takes them. The request carries no data about the
+  user. `Timeglass:CheckForUpdates=false` (host option) turns it off.
+- **Install at a start.** Downloading changes nothing that runs. On the next start,
+  `InstalledApp.ApplyPendingUpdate` hands the download to `Update.exe` and the process exits
+  before the host is built; the updater swaps `current\` and starts the app again, which takes
+  a few seconds. It runs after the single instance check, so a second launch only opens the
+  dashboard and never pulls the files from under the tracker. A process the updater started
+  doesn't ask again (`OnRestarted`), so an update that fails to install can't loop. The tray's
+  _Restart to update_ starts the updater and then quits through the normal shutdown, so the
+  open interval is closed and stored first.
+- **Autostart.** `InstalledApp.StableLauncher` maps `current\Timeglass.exe` to the launcher
+  one folder up when `Update.exe` is next to it, and that is what _Start with Windows_
+  registers. On the first run after setup (`OnFirstRun`), a value that starts another copy is
+  pointed at the launcher (`AutostartRegistration.Adopt`, which keeps Task Manager's _off_
+  flag). On uninstall the value is removed if it starts this copy. The recorded data is left
+  in place.
+- **Packaging.** CI's _Package_ job publishes twice: the single-file exe for the zip, and a
+  publish with one file per assembly that `vpk pack` turns into the setup exe, the full
+  package, the delta against the previous release (tag builds only) and the feed. `release.yml`
+  attaches them all to the GitHub Release, which is the feed.
+- **Tests.** `UpdateServiceTests` runs the schedule on a fake clock against a fake updater,
+  `InstalledAppTests` covers the launcher path, the start-up rule and the hooks, and the
+  composition test checks the real `VelopackUpdater` reports "not installed" in the test host.
+  Velopack's own download and install are not exercised by the suite.
 
 ### Logging and crashes
 

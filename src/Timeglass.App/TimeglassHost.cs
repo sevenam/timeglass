@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Timeglass.App.Logging;
 using Timeglass.App.Settings;
+using Timeglass.App.Updates;
 using Timeglass.Core.Apps;
 using Timeglass.Core.Ports;
 using Timeglass.Core.Settings;
@@ -115,6 +116,11 @@ internal static partial class TimeglassHost
         services.AddSingleton<TrackerDataDeletion>();
         services.AddSingleton<CrashHandler>();
 
+        // Updates for an installed copy (#40). Last, so the first check starts after everything else.
+        services.AddSingleton<IAppUpdater, VelopackUpdater>();
+        services.AddSingleton<UpdateService>();
+        services.AddHostedService(sp => sp.GetRequiredService<UpdateService>());
+
         return services;
     }
 
@@ -143,11 +149,13 @@ internal static partial class TimeglassHost
     }
 
     /// <summary>
-    /// The exe that <i>Start with Windows</i> registers: the one running now. Once the app is
-    /// installed with Velopack (#40), this becomes the installer's stable launcher, whose path
-    /// stays the same across updates.
+    /// The exe that <i>Start with Windows</i> registers: the one running now, or for a copy
+    /// installed by the setup program (#40) its launcher, whose path stays the same across updates.
     /// </summary>
-    public static string AutostartExecutable =>
+    public static string AutostartExecutable => InstalledApp.StableLauncher(ProcessPath);
+
+    /// <summary>Full path of the running exe.</summary>
+    public static string ProcessPath =>
         Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "Timeglass.exe");
 
     /// <summary>

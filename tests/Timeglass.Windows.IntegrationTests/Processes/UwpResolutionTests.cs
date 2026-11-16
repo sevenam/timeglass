@@ -37,10 +37,12 @@ public sealed partial class UwpResolutionTests : IDisposable
 
         var inspector = WindowInspector.CreateDefault();
         var deadline = DateTime.UtcNow + OpenTimeout;
+        List<nint> newFrameHandles = [];
         List<WindowSnapshot> newFrames = [];
         while (DateTime.UtcNow < deadline)
         {
-            newFrames = [.. FrameWindows().Where(h => !framesBefore.Contains(h)).Select(h => inspector.Read((HWND)h)).OfType<WindowSnapshot>()];
+            newFrameHandles = [.. FrameWindows().Where(h => !framesBefore.Contains(h))];
+            newFrames = [.. newFrameHandles.Select(h => inspector.Read((HWND)h)).OfType<WindowSnapshot>()];
             var calculator = newFrames.FirstOrDefault(s => IsCalculator(s.ExeName));
             if (calculator is not null)
             {
@@ -56,6 +58,15 @@ public sealed partial class UwpResolutionTests : IDisposable
         if (newFrames.Count == 0)
         {
             Assert.Skip("Calculator did not open a frame window on this desktop.");
+        }
+
+        // The app's own window joins the frame only once the frame is shown. With the display off,
+        // or the frame on another virtual desktop, it never does, and the frame host is all there
+        // is to resolve; that is correct behaviour, not the bug. Checked here with plain Win32,
+        // independently of the code under test.
+        if (!newFrameHandles.Any(HasChildOfAnotherProcess))
+        {
+            Assert.Skip("Calculator's window never joined its frame (display off, or another virtual desktop).");
         }
 
         // A frame window appeared but still resolves to the frame host: that is the bug this test is for.
@@ -127,6 +138,32 @@ public sealed partial class UwpResolutionTests : IDisposable
         return windows;
     }
 
+    /// <summary>True if a direct child of <paramref name="frame"/> belongs to another process than the frame.</summary>
+    private static bool HasChildOfAnotherProcess(nint frame)
+    {
+        var frameProcess = ProcessIdOf(frame);
+        nint child = 0;
+        while ((child = FindWindowEx(frame, child, null, null)) != 0)
+        {
+            var childProcess = ProcessIdOf(child);
+            if (childProcess != 0 && childProcess != frameProcess)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static uint ProcessIdOf(nint window)
+    {
+        _ = GetWindowThreadProcessId(window, out var processId);
+        return processId;
+    }
+
     [LibraryImport("user32.dll", EntryPoint = "FindWindowExW", StringMarshalling = StringMarshalling.Utf16)]
     private static partial nint FindWindowEx(nint parent, nint childAfter, string? className, string? windowName);
+
+    [LibraryImport("user32.dll")]
+    private static partial uint GetWindowThreadProcessId(nint window, out uint processId);
 }

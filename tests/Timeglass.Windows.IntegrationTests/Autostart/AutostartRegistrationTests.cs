@@ -193,6 +193,73 @@ public class AutostartRegistrationTests
         _key.Approved.ShouldBeEmpty();
     }
 
+    [Fact]
+    public void Registered_executable_is_whatever_the_value_starts()
+    {
+        var autostart = Create();
+        autostart.RegisteredExecutable.ShouldBeNull();
+
+        _key.Values[AutostartRegistration.DefaultValueName] = "\"D:\\Old\\Timeglass.exe\" --minimized";
+        autostart.RegisteredExecutable.ShouldBe(@"D:\Old\Timeglass.exe");
+
+        _key.Values[AutostartRegistration.DefaultValueName] = "\"\"";
+        autostart.RegisteredExecutable.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Registered_executable_ignores_the_Task_Manager_flag()
+    {
+        var autostart = Create();
+        autostart.Enable();
+        _key.Approved[AutostartRegistration.DefaultValueName] = [0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+
+        autostart.RegisteredExecutable.ShouldBe(Exe);
+    }
+
+    [Fact]
+    public void Adopt_points_another_copys_value_at_this_exe()
+    {
+        _key.Values[AutostartRegistration.DefaultValueName] = "\"D:\\Old\\Timeglass.exe\"";
+        var autostart = Create();
+
+        autostart.Adopt().ShouldBeTrue();
+
+        _key.Values[AutostartRegistration.DefaultValueName].ShouldBe($"\"{Exe}\"");
+        autostart.IsEnabled.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Adopt_keeps_autostart_off_when_Task_Manager_turned_it_off()
+    {
+        _key.Values[AutostartRegistration.DefaultValueName] = "\"D:\\Old\\Timeglass.exe\"";
+        _key.Approved[AutostartRegistration.DefaultValueName] = [0x03, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        var autostart = Create();
+
+        autostart.Adopt().ShouldBeTrue();
+
+        _key.Approved.ShouldContainKey(AutostartRegistration.DefaultValueName);
+        autostart.IsEnabled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Adopt_does_not_turn_autostart_on()
+    {
+        Create().Adopt().ShouldBeFalse();
+
+        _key.Values.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Adopt_leaves_a_value_for_this_exe_as_it_is()
+    {
+        var command = "\"c:\\users\\ME\\appdata\\local\\timeglass\\TIMEGLASS.EXE\" --minimized";
+        _key.Values[AutostartRegistration.DefaultValueName] = command;
+
+        Create().Adopt().ShouldBeFalse();
+
+        _key.Values[AutostartRegistration.DefaultValueName].ShouldBe(command);
+    }
+
     private sealed class FakeStartupRegistry : IStartupRegistry
     {
         public Dictionary<string, string> Values { get; } = [];

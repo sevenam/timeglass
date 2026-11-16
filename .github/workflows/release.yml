@@ -1,7 +1,11 @@
 name: Release
 
-# Pushing a v* tag (#38) runs the full CI suite, then creates a GitHub Release with the zipped
-# single-file build and its SHA-256, with notes generated from the merged PRs.
+# Pushing a v* tag (#38) runs the full CI suite, then creates a GitHub Release with the installer,
+# the zipped single-file build, their SHA-256 files and notes generated from the merged PRs.
+#
+# The release is also the update feed (#40): installed copies read its releases.win.json and
+# download the .nupkg files next to it (the full package, or the delta from the release before).
+# Don't rename or remove those assets, and publish the release (a draft is not seen).
 #
 #   git tag v0.1.0
 #   git push origin v0.1.0
@@ -52,7 +56,20 @@ jobs:
             echo "::error::Expected $zip for tag $GITHUB_REF_NAME, found: $(ls package)"
             exit 1
           fi
-          (cd package && sha256sum -c "$(basename "$zip").sha256")
+          setup="package/timeglass-${version}-win-x64-setup.exe"
+          full="sevenam.Timeglass-${version}-full.nupkg"
+          for file in "$setup" "package/$full" package/releases.win.json; do
+            if [[ ! -f "$file" ]]; then
+              echo "::error::Expected $file for tag $GITHUB_REF_NAME, found: $(ls package)"
+              exit 1
+            fi
+          done
+          # The feed must offer this version, or installed copies never see the release.
+          if ! grep -qF "\"$full\"" package/releases.win.json; then
+            echo "::error::releases.win.json does not list $full"
+            exit 1
+          fi
+          (cd package && sha256sum -c "$(basename "$zip").sha256" "$(basename "$setup").sha256")
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Create release
@@ -68,6 +85,8 @@ jobs:
             --title "Timeglass $VERSION" \
             --generate-notes \
             "${prerelease[@]}" \
-            --notes "Download \`timeglass-$VERSION-win-x64.zip\`, unzip it and run \`Timeglass.exe\`. It needs no install and no .NET runtime.
+            --notes "Download and run \`timeglass-$VERSION-win-x64-setup.exe\`. It installs for your user only, without admin rights, and Timeglass keeps itself up to date from then on. If it is already installed, it picks this version up by itself.
 
-          The build isn't code-signed yet, so Windows SmartScreen warns the first time you run it: choose **More info**, then **Run anyway**. To check the download, compare \`Get-FileHash timeglass-$VERSION-win-x64.zip\` with the \`.sha256\` file."
+          Prefer no install? \`timeglass-$VERSION-win-x64.zip\` holds a single \`Timeglass.exe\` that runs from any folder and does not update itself. Neither needs a .NET runtime. The \`.nupkg\` files and \`releases.win.json\` are for the updater.
+
+          The build isn't code-signed yet, so Windows SmartScreen warns the first time you run it: choose **More info**, then **Run anyway**. To check a download, compare \`Get-FileHash\` of the file with its \`.sha256\` file."

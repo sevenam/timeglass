@@ -40,6 +40,8 @@
     <PackageReference Include="Serilog.Sinks.File" />
     <!-- Serves the embedded dashboard (#30). -->
     <PackageReference Include="Microsoft.Extensions.FileProviders.Embedded" />
+    <!-- Installer and auto-update (#40). -->
+    <PackageReference Include="Velopack" />
   </ItemGroup>
 
   <ItemGroup>

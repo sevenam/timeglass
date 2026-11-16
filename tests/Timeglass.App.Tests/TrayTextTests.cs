@@ -58,6 +58,10 @@ public class TrayTextTests
         TrayText.Version(informational).ShouldBe(expected);
 
     [Fact]
+    public void Update_item_names_the_version() =>
+        TrayText.UpdateItem("0.2.0").ShouldBe("Restart to &update to 0.2.0");
+
+    [Fact]
     public void About_starts_with_the_name_and_version() =>
         TrayText.About("0.1.0+3f2a1b9c").ShouldStartWith("Timeglass 0.1.0 (3f2a1b9)\n");
 

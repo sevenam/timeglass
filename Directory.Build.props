@@ -18,6 +18,8 @@
       Needs the tags and history, so release jobs check out with fetch-depth: 0.
     -->
     <MinVerTagPrefix>v</MinVerTagPrefix>
+    <!-- Before the first tag builds are 0.1.0-alpha.0.N, not 0.0.0-…: the installer (#40) needs a version of at least 0.0.1. -->
+    <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(PublishSingleFile)' == 'true'">
     <!-- The release exe (#38) carries its symbols, so stack traces in the log keep line numbers. -->

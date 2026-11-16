@@ -50,6 +50,31 @@ public sealed class AutostartRegistration
         && !IsTurnedOff(_registry.GetApprovedValue(ValueName));
 
     /// <summary>
+    /// The program the value starts, whichever it is and whether or not Task Manager turned it
+    /// off; <see langword="null"/> without a value, or with one that holds no path.
+    /// </summary>
+    public string? RegisteredExecutable =>
+        _registry.GetRunValue(ValueName) is { } command ? ParseExecutable(command) : null;
+
+    /// <summary>
+    /// Points a value that starts another file at <see cref="ExecutablePath"/>: the app moved, for
+    /// example from an unzipped copy to an installed one (#40). Does nothing without a value, and
+    /// leaves Task Manager's flag alone, so autostart the user turned off stays off.
+    /// </summary>
+    /// <returns>Whether the value was changed.</returns>
+    public bool Adopt()
+    {
+        if (RegisteredExecutable is not { } registered
+            || string.Equals(registered, ExecutablePath, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        _registry.SetRunValue(ValueName, Command);
+        return true;
+    }
+
+    /// <summary>
     /// Registers <see cref="Command"/>, replacing whatever the value held, and clears a
     /// <i>disabled</i> flag Task Manager may have left, so the app really starts.
     /// </summary>

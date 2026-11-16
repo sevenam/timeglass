@@ -4,6 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Timeglass.Api;
 using Timeglass.App.Tray;
+using Timeglass.App.Updates;
 using Timeglass.Core.Domain;
 using Timeglass.Core.Ports;
 using Timeglass.Storage;
@@ -55,6 +56,10 @@ public sealed class CompositionTests : IDisposable
                 host.Start();
                 host.Services.GetRequiredService<TrackingController>().IsPaused.ShouldBeFalse();
                 CheckTheApiIsUp(host.Services.GetRequiredService<ApiServer>());
+
+                // The test host was not installed by the setup program: no update checks, no network.
+                host.Services.GetRequiredService<IAppUpdater>().ShouldBeOfType<VelopackUpdater>().IsInstalled.ShouldBeFalse();
+                host.Services.GetServices<IHostedService>().ShouldContain(host.Services.GetRequiredService<UpdateService>());
 
                 using var tray = ActivatorUtilities.CreateInstance<TrayApplicationContext>(host.Services);
             }

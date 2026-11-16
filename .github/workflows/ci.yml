@@ -287,9 +287,9 @@ jobs:
           retention-days: 14
 
   # The release build (#38): Timeglass.exe as one self-contained file with the dashboard embedded,
-  # zipped with its SHA-256. It is built on every run so a change that breaks publishing fails here;
-  # the release workflow attaches this artifact to the GitHub Release, and each main build keeps it
-  # as a nightly-style download.
+  # zipped with its SHA-256, and the installer with its update packages (#40). It is built on every
+  # run so a change that breaks publishing fails here; the release workflow attaches this artifact
+  # to the GitHub Release, and each main build keeps it as a nightly-style download.
   package:
     name: Package (win-x64)
     runs-on: windows-latest
@@ -338,6 +338,71 @@ jobs:
 
           "version=$version" >> $env:GITHUB_OUTPUT
           "### Package`n`n``$name`` ($version)`n`nSHA-256 ``$hash``" >> $env:GITHUB_STEP_SUMMARY
+
+      # The installer (#40) is built from a second publish with one file per assembly: an update
+      # then only downloads the assemblies that changed (a delta), which a single compressed exe
+      # would hide. Symbols are embedded here too, so stack traces keep their line numbers.
+      - name: Publish for the installer
+        run: >
+          dotnet publish src/Timeglass.App/Timeglass.App.csproj -c Release
+          -r win-x64 --self-contained -p:DebugType=embedded
+          -p:TimeglassBuildWeb=false -o publish-installer
+
+      # vpk, pinned in dotnet-tools.json to the version of the Velopack package the app uses.
+      - name: Restore tools
+        run: dotnet tool restore
+
+      # A delta is the difference to the release before, so a release build fetches that one.
+      # Other builds are never published and skip it. Without a delta an update still works; it
+      # downloads the full package.
+      - name: Download the previous release
+        if: ${{ github.ref_type == 'tag' }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.zip.outputs.version }}
+        run: |
+          $vpk = @('download', 'github', '--repoUrl', "https://github.com/$env:GITHUB_REPOSITORY",
+            '--token', $env:GH_TOKEN, '--outputDir', 'releases')
+          if ($env:VERSION -match '-') { $vpk += '--pre' }
+
+          # Succeeds with nothing downloaded when there is no release yet (the first one).
+          dotnet vpk @vpk
+          if ($LASTEXITCODE -ne 0) { throw "vpk download failed ($LASTEXITCODE)" }
+          if (-not (Test-Path releases/*-full.nupkg)) {
+            "::notice::No previous release to build a delta from; this release has the full package only."
+          }
+
+      # Makes the setup exe, the full update package, the delta if there is a previous release and
+      # the feed (releases.win.json) the app reads from the GitHub Release. The package id is the
+      # install folder under %LOCALAPPDATA% and must stay the same for updates to be found; it is
+      # InstalledApp.PackageId in the app.
+      - name: Pack the installer
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.zip.outputs.version }}
+        run: |
+          $id = 'sevenam.Timeglass'
+          dotnet vpk pack --packId $id --packVersion $env:VERSION --runtime win-x64 `
+            --packDir publish-installer --mainExe Timeglass.exe `
+            --packTitle Timeglass --packAuthors sevenam `
+            --icon src/Timeglass.App/Assets/timeglass.ico `
+            --shortcuts StartMenuRoot --noPortable --outputDir releases
+          if ($LASTEXITCODE -ne 0) { throw "vpk pack failed ($LASTEXITCODE)" }
+
+          # Only this version's files go into the release; releases/ may also hold the previous one.
+          $setup = "timeglass-$env:VERSION-win-x64-setup.exe"
+          Copy-Item "releases/$id-win-Setup.exe" "package/$setup"
+          Copy-Item "releases/$id-$env:VERSION-full.nupkg" package/
+          Copy-Item releases/releases.win.json package/
+          $delta = "releases/$id-$env:VERSION-delta.nupkg"
+          if (Test-Path $delta) { Copy-Item $delta package/ }
+
+          $hash = (Get-FileHash "package/$setup" -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path "package/$setup.sha256" -Value "$hash  $setup" -NoNewline -Encoding ascii
+
+          $files = Get-ChildItem package | ForEach-Object { "- ``$($_.Name)`` ($([math]::Round($_.Length / 1MB, 1)) MB)" }
+          "### Installer`n`n$($files -join "`n")`n`nSHA-256 of the setup exe ``$hash``" >> $env:GITHUB_STEP_SUMMARY
 
       - name: Upload package
         uses: actions/upload-artifact@v7

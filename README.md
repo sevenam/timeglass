@@ -35,11 +35,36 @@ There are two solutions:
 
 ## Download
 
-Each [release](https://github.com/sevenam/timeglass/releases) has a zip with a single
-`Timeglass.exe` for 64-bit Windows 10 or 11: unzip it anywhere and run it, no install or .NET
-runtime needed. It isn't code-signed yet, so SmartScreen warns the first time (choose
-**More info**, then **Run anyway**). The tray menu's **About Timeglass** shows which version you
-have. How releases are made is in [CONTRIBUTING.md](CONTRIBUTING.md#releases).
+Each [release](https://github.com/sevenam/timeglass/releases) has two downloads for 64-bit
+Windows 10 or 11. Neither needs a .NET runtime.
+
+- **`timeglass-<version>-win-x64-setup.exe`** installs Timeglass for your user, without admin
+  rights, adds it to the Start menu and starts it. From then on it keeps itself up to date
+  (below). Uninstall it under _Installed apps_ in Windows Settings.
+- **`timeglass-<version>-win-x64.zip`** holds a single `Timeglass.exe`: unzip it anywhere and
+  run it. Nothing is installed, and it does not update itself.
+
+Neither is code-signed yet, so SmartScreen warns the first time (choose **More info**, then
+**Run anyway**). The tray menu's **About Timeglass** shows which version you have. How releases
+are made is in [CONTRIBUTING.md](CONTRIBUTING.md#releases).
+
+### Updates
+
+An installed Timeglass looks for a newer release half a minute after it starts and once a day
+after that, and downloads it in the background (usually only the parts that changed). Nothing
+changes while it runs: the new version is installed the next time Timeglass starts, for example
+when you sign in. Once a version is downloaded the tray menu also offers **Restart to update**.
+
+The check is the only time Timeglass uses the network. It asks GitHub for this repository's
+list of releases and sends nothing about you or what was recorded. To turn it off, set the
+environment variable `DOTNET_Timeglass__CheckForUpdates` to `false` (or use the zip).
+
+The app is installed in `%LOCALAPPDATA%\sevenam.Timeglass`. Your data is in another folder
+([below](#where-data-is-stored)), so updating, reinstalling and uninstalling all leave it alone;
+delete that folder yourself if you want the recorded time gone too. **Start with Windows**
+registers the installed launcher, whose path stays the same across updates, and uninstalling
+removes it. If it was on for an unzipped copy before you installed, the first run moves it to
+the installed one.
 
 ## Prerequisites
 
@@ -182,7 +207,9 @@ starts it in its project folder, so relative paths start there).
 
 The database uses WAL mode, so you will also see `timeglass.db-wal` and `timeglass.db-shm`
 next to it while the app runs. Timestamps are stored as UTC Unix milliseconds. To start over,
-quit the app and delete the folder.
+quit the app and delete the folder. The installer puts the program in a folder of its own
+(`%LOCALAPPDATA%\sevenam.Timeglass`) and never touches this one, not even on uninstall. The
+updater logs to `%LOCALAPPDATA%\velopack\`; those logs hold versions and paths, nothing recorded.
 
 Log files roll over daily (and past 10 MB) and are deleted after seven days. The tray menu's
 _Open log folder_ opens them. The level is `Information` by default; set `"logLevel": "Debug"`

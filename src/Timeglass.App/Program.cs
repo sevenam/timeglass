@@ -3,7 +3,10 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Timeglass.App.Logging;
 using Timeglass.App.Tray;
+using Timeglass.App.Updates;
 using Timeglass.Core.Ports;
+using Timeglass.Windows.Autostart;
+using Velopack;
 
 namespace Timeglass.App;
 
@@ -18,6 +21,18 @@ internal static partial class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // First of all: the setup program and the updater start the app with their own arguments
+        // to run these hooks (#40), and expect it to exit at once. A normal start falls through.
+        var restartedByUpdater = false;
+        VelopackApp.Build()
+            // Done below instead, after the single instance check: a second launch must open the
+            // dashboard, not replace the files of the instance that is tracking.
+            .SetAutoApplyOnStartup(false)
+            .OnRestarted(_ => restartedByUpdater = true)
+            .OnFirstRun(_ => InstalledApp.OnFirstRun(Autostart()))
+            .OnBeforeUninstallFastCallback(_ => InstalledApp.OnUninstall(Autostart(), TimeglassHost.ProcessPath))
+            .Run();
+
         // Route UI thread exceptions to Application.ThreadException (CrashHandler) instead of
         // the WinForms error dialog. Must happen before any control is created.
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.CatchException);
@@ -27,6 +42,12 @@ internal static partial class Program
         if (!instance.IsFirst)
         {
             instance.SignalFirst();
+            return 0;
+        }
+
+        // A version downloaded by the last run is installed now, before anything is tracked.
+        if (InstalledApp.ApplyPendingUpdate(new VelopackUpdater(), restartedByUpdater, args))
+        {
             return 0;
         }
 
@@ -75,6 +96,9 @@ internal static partial class Program
             TimeglassHost.StopAndDispose(host);
         }
     }
+
+    private static AutostartRegistration Autostart() =>
+        new(CurrentUserStartupRegistry.Instance, TimeglassHost.AutostartExecutable);
 
     private static void ShowStartupError(Exception ex) =>
         MessageBox.Show(

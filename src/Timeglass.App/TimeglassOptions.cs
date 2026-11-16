@@ -35,6 +35,12 @@ internal sealed class TimeglassOptions
     /// <summary>The user's settings file. Defaults to <see cref="SettingsFile.DefaultPath"/>.</summary>
     public string? SettingsPath { get; set; }
 
+    /// <summary>
+    /// Whether an installed copy looks for new versions on GitHub and downloads them (#40). On by
+    /// default; <c>DOTNET_Timeglass__CheckForUpdates=false</c> turns the app's only network use off.
+    /// </summary>
+    public bool CheckForUpdates { get; set; } = true;
+
     /// <summary>Folder for the log files. Defaults to <see cref="LogFolder.DefaultPath"/>.</summary>
     public string? LogDirectory { get; set; }
 }

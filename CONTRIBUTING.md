@@ -173,7 +173,8 @@ npm run generate:api
 
 Versions come from git tags through [MinVer](https://github.com/adamralph/minver): on the
 commit tagged `v0.1.0` every assembly is `0.1.0`, and later commits are `0.1.1-alpha.0.N`
-(N commits after the tag). Without any tag, builds are `0.0.0-alpha.0.N`. The tray menu's
+(N commits after the tag). Without any tag, builds are `0.1.0-alpha.0.N`
+(`MinVerMinimumMajorMinor`; the installer does not take a `0.0.0` version). The tray menu's
 _About Timeglass_ shows the version and commit.
 
 To release, tag `main` and push the tag:
@@ -184,10 +185,26 @@ git push origin v0.1.0
 ```
 
 `.github/workflows/release.yml` runs the whole CI suite, then creates a GitHub Release with
-`timeglass-0.1.0-win-x64.zip` (a single self-contained `Timeglass.exe`), its `.sha256` and notes
-generated from the merged PRs. A tag like `v0.2.0-beta.1` makes a pre-release. Every CI run
-also builds the zip (the _Package_ job); on `main` it is kept as the `timeglass-win-x64`
-artifact for 30 days, as a nightly build.
+notes generated from the merged PRs and these files:
+
+| File                                                | What it is                                                     |
+| --------------------------------------------------- | -------------------------------------------------------------- |
+| `timeglass-0.1.0-win-x64-setup.exe`, `.sha256`      | The installer ([Velopack](https://velopack.io)), per user.     |
+| `timeglass-0.1.0-win-x64.zip`, `.sha256`            | A single self-contained `Timeglass.exe`, no install.           |
+| `sevenam.Timeglass-0.1.0-full.nupkg`                | The whole app as an update package.                            |
+| `sevenam.Timeglass-0.1.0-delta.nupkg`               | The difference to the release before (not in the first one).   |
+| `releases.win.json`                                 | The update feed: which packages this release has, with hashes. |
+
+A tag like `v0.2.0-beta.1` makes a pre-release. Every CI run also builds these files (the
+_Package_ job, without the delta); on `main` they are kept as the `timeglass-win-x64` artifact
+for 30 days, as a nightly build.
+
+The release is what installed copies update from: they read `releases.win.json` from the
+latest releases and download the `.nupkg` files. So don't rename or delete those assets, keep
+versions going up, and note that a draft release is not seen by anyone. Stable builds only take
+stable releases; a pre-release build also takes pre-releases. The package id
+`sevenam.Timeglass` (`ci.yml` and `InstalledApp.PackageId`) names the install folder and must
+never change, or installed copies stop finding updates.
 
 To build the same exe locally (on Windows, or anywhere with `-p:EnableWindowsTargeting=true`):
 
@@ -195,4 +212,18 @@ To build the same exe locally (on Windows, or anywhere with `-p:EnableWindowsTar
 dotnet publish src/Timeglass.App -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o publish
 ```
 
-Builds aren't code-signed yet, so SmartScreen warns on first run.
+And the installer, from a publish with one file per assembly (so updates can be deltas), with
+`vpk` from `dotnet tool restore`. Give it a version above the one you have installed:
+
+```sh
+dotnet publish src/Timeglass.App -c Release -r win-x64 --self-contained -p:DebugType=embedded -o publish-installer
+dotnet vpk pack --packId sevenam.Timeglass --packVersion 0.1.0 --runtime win-x64 --packDir publish-installer --mainExe Timeglass.exe --packTitle Timeglass --icon src/Timeglass.App/Assets/timeglass.ico --shortcuts StartMenuRoot --outputDir releases
+```
+
+`vpk` and the `Velopack` package the app references must have the same version
+(`dotnet-tools.json` and `Directory.Packages.props`); Dependabot updates them together.
+
+Builds aren't code-signed yet, so SmartScreen warns on first run. The update flow itself (a
+released version finding, downloading and installing the next one) is not covered by automated
+tests: after changing `src/Timeglass.App/Updates` or the packaging, install a build, publish a
+higher pre-release and watch it update.

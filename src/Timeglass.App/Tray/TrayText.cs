@@ -74,6 +74,9 @@ internal static class TrayText
             : $"{version} ({commit[..Math.Min(7, commit.Length)]})";
     }
 
+    /// <summary>The menu item shown once a new version is downloaded: <c>Restart to update to 0.2.0</c>.</summary>
+    public static string UpdateItem(string version) => $"Restart to &update to {version}";
+
     /// <summary>The <i>About</i> box: <c>Timeglass 0.1.0 (3f2a1b9)</c> and a line on what it does.</summary>
     public static string About(string? informationalVersion) =>
         $"Timeglass {Version(informationalVersion)}\n\nTracks which apps you use. Everything stays on this computer.";

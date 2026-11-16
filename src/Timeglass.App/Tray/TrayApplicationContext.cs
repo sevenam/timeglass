@@ -4,6 +4,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Timeglass.App.Logging;
+using Timeglass.App.Updates;
 using Timeglass.Core.Tracking;
 using Timeglass.Windows.Autostart;
 
@@ -24,6 +25,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly DashboardLauncher _dashboard;
     private readonly LogFolder _logFolder;
     private readonly AutostartRegistration _autostart;
+    private readonly UpdateService _updates;
     private readonly ILogger _logger;
     private readonly SynchronizationContext _ui;
     private readonly CancellationTokenRegistration _stopping;
@@ -38,6 +40,8 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
     private readonly ToolStripMenuItem _settings = new("&Settings (coming soon)") { Enabled = false };
     private readonly ToolStripMenuItem _openLogFolder = new("Open &log folder");
     private readonly ToolStripMenuItem _about = new("&About Timeglass");
+    private readonly ToolStripMenuItem _restartToUpdate = new() { Visible = false };
+    private readonly ToolStripSeparator _separator = new();
     private readonly ToolStripMenuItem _quit = new("&Quit");
     private readonly NotifyIcon _icon;
     private readonly System.Windows.Forms.Timer _refresh = new();
@@ -51,6 +55,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         DashboardLauncher dashboard,
         LogFolder logFolder,
         AutostartRegistration autostart,
+        UpdateService updates,
         IOptions<TimeglassOptions> options,
         IHostApplicationLifetime lifetime,
         ILogger<TrayApplicationContext> logger)
@@ -60,6 +65,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         _dashboard = dashboard;
         _logFolder = logFolder;
         _autostart = autostart;
+        _updates = updates;
         _logger = logger;
 
         _openDashboard.Font = new Font(_openDashboard.Font, FontStyle.Bold);
@@ -75,11 +81,13 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         _startWithWindows.Click += (_, _) => ToggleAutostart();
         _openLogFolder.Click += (_, _) => OpenLogFolder();
         _about.Click += (_, _) => ShowAbout();
+        _restartToUpdate.Click += (_, _) => RestartToUpdate();
         _quit.Click += (_, _) => ExitThread();
-        _menu.Items.AddRange([_openDashboard, _pause, _resume, _startWithWindows, _settings, _openLogFolder, _about, new ToolStripSeparator(), _quit]);
+        _menu.Items.AddRange([_openDashboard, _pause, _resume, _startWithWindows, _settings, _openLogFolder, _about, _restartToUpdate, _separator, _quit]);
         _menu.Opening += (_, _) =>
         {
             RefreshAutostart();
+            RefreshUpdate();
             RefreshTooltip();
         };
 
@@ -130,6 +138,7 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
             _icon.Visible = false;
             _icon.Dispose();
             _menu.Dispose();
+            _separator.Dispose();
             _openDashboard.Font.Dispose();
             _activeIcon.Dispose();
             _pausedIcon.Dispose();
@@ -182,6 +191,30 @@ internal sealed partial class TrayApplicationContext : ApplicationContext
         var version = typeof(TrayApplicationContext).Assembly
             .GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
         MessageBox.Show(TrayText.About(version), "About Timeglass", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
+
+    /// <summary>Shows <i>Restart to update</i> once a new version is downloaded (#40).</summary>
+    private void RefreshUpdate()
+    {
+        var version = _updates.ReadyVersion;
+        _restartToUpdate.Visible = version is not null;
+        if (version is not null)
+        {
+            _restartToUpdate.Text = TrayText.UpdateItem(version);
+        }
+    }
+
+    /// <summary>Quits the normal way, so the open interval is stored; the updater then installs and starts the new version.</summary>
+    private void RestartToUpdate()
+    {
+        if (_updates.TryApplyAfterExit())
+        {
+            ExitThread();
+        }
+        else
+        {
+            _icon.ShowBalloonTip(5000, "Timeglass", "Could not start the update. It will be installed the next time Timeglass starts.", ToolTipIcon.Warning);
+        }
     }
 
     /// <summary>Shows the registry's state, so a change made in Task Manager is not overwritten.</summary>
