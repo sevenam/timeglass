@@ -101,6 +101,10 @@ export function hourTicks(dayStartIso: string, range: TimeRange): HourTick[] {
 export function layoutTimeline(
   timeline: TimelineDto,
   colorFor: (appKey: string) => string,
+  options: {
+    colorByGroup?: boolean;
+    includeBlock?: ((block: TimelineBlockDto) => boolean) | undefined;
+  } = {},
 ): TimelineLayout | null {
   const range = visibleRange(timeline);
   if (range === null) {
@@ -108,11 +112,17 @@ export function layoutTimeline(
   }
   return {
     range,
-    segments: timeline.blocks.map((block) => ({
-      block,
-      color: block.kind === 'active' && block.app ? colorFor(block.app.key) : null,
-      ...position(range, Date.parse(block.start), Date.parse(block.end)),
-    })),
+    segments: timeline.blocks
+      .filter((block) => options.includeBlock?.(block) ?? true)
+      .map((block) => ({
+        block,
+        color: options.colorByGroup
+          ? colorFor(block.kind === 'away' ? 'away' : (block.category?.key ?? 'ungrouped'))
+          : block.kind === 'active' && block.app
+            ? colorFor(block.app.key)
+            : null,
+        ...position(range, Date.parse(block.start), Date.parse(block.end)),
+      })),
     ticks: hourTicks(timeline.start, range),
   };
 }

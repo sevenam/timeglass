@@ -20,7 +20,7 @@ const MAX_DOTS = 31;
  * the days (or weeks) of the period on the x axis. It is a picture for sighted users; the table
  * next to it holds the same apps with their numbers.
  */
-export function TrendChart({ trend }: { trend: Trend }) {
+export function TrendChart({ trend, byCategory = false }: { trend: Trend; byCategory?: boolean }) {
   const { buckets, series, unit } = trend;
   const ticks = axisTicks(trend.maxMs);
   const top = ticks.at(-1) ?? 1;
@@ -42,7 +42,7 @@ export function TrendChart({ trend }: { trend: Trend }) {
       className="trend-chart"
       viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
       role="img"
-      aria-label={`Average active time per day, ${unit} by ${unit}, for ${names}`}
+      aria-label={`Average ${byCategory ? 'tracked' : 'active'} time per day, ${unit} by ${unit}, for ${names}`}
     >
       {ticks.map((t) => (
         <g key={t} className="trend-chart__tick">

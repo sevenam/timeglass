@@ -15,7 +15,7 @@ export interface TitleRow {
  * True when the app had time but none of it has a title: title recording was off, or the app is
  * one whose titles aren't recorded. Then a list with one "no title" row says nothing useful.
  */
-export function hasNoTitles(day: AppDayDto): boolean {
+export function hasNoTitles(day: Pick<AppDayDto, 'totalMs' | 'titles'>): boolean {
   return day.totalMs > 0 && day.titles.every((t) => t.title === null);
 }
 

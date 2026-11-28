@@ -114,6 +114,7 @@ export function timeline(date: string = demoDate): TimelineDto {
     end: at(date, end),
     durationMs,
     isOpen,
+    category: null,
   });
   return {
     date,
@@ -196,6 +197,49 @@ export function rangeSummary(from: string, to: string): RangeSummaryDto {
   };
 }
 
+/** A category range shaped like the API response, including the built-in away category. */
+export function categoryRangeSummary(from: string, to: string): RangeSummaryDto {
+  const summary = rangeSummary(from, to);
+  const totals = (activeMs: number, awayMs: number): AppTotalDto[] => {
+    const totalMs = activeMs + awayMs;
+    if (totalMs === 0) {
+      return [];
+    }
+    return [
+      ...(activeMs > 0
+        ? [
+            {
+              app: { key: 'category-0', name: 'Work' },
+              durationMs: activeMs,
+              share: activeMs / totalMs,
+              percent: Math.round((activeMs / totalMs) * 100),
+              color: 'hsl(0 75% 50%)',
+            },
+          ]
+        : []),
+      ...(awayMs > 0
+        ? [
+            {
+              app: { key: 'away', name: 'Away' },
+              durationMs: awayMs,
+              share: awayMs / totalMs,
+              percent: Math.round((awayMs / totalMs) * 100),
+              color: 'hsl(220 9% 60%)',
+            },
+          ]
+        : []),
+    ];
+  };
+  return {
+    ...summary,
+    apps: totals(summary.activeMs, summary.awayMs),
+    days: summary.days.map((day) => ({
+      ...day,
+      apps: totals(day.activeMs, day.awayMs),
+    })),
+  };
+}
+
 /** The default settings, with Windows autostart available and off. */
 export function settings(overrides: Partial<SettingsDto> = {}): SettingsDto {
   return {
@@ -205,6 +249,7 @@ export function settings(overrides: Partial<SettingsDto> = {}): SettingsDto {
     recordWindowTitles: true,
     appsWithoutTitles: [],
     appAliases: [],
+    categories: [],
     startWithWindows: false,
     workHoursStartMinutes: 9 * 60,
     workHoursEndMinutes: 17 * 60,

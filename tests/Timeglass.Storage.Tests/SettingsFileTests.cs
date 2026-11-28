@@ -52,6 +52,11 @@ public sealed class SettingsFileTests : IDisposable
             ExcludedApps = ["keepass"],
             AppsWithoutTitles = ["outlook"],
             AppAliases = [new AppAliasSetting { Key = "outlook", Name = "Mail" }],
+            Categories =
+            [
+                new CategorySetting { Name = "Investigator", Keywords = ["investigator", "research"] },
+                new CategorySetting { Name = "Prizm", Keywords = ["prizm"] },
+            ],
             ApiPort = 6000,
             LogLevel = LogLevel.Debug,
         };
@@ -63,6 +68,8 @@ public sealed class SettingsFileTests : IDisposable
         loaded.LogLevel.ShouldBe(LogLevel.Debug);
         loaded.IdleThreshold.ShouldBe(TimeSpan.FromMinutes(10));
         loaded.AppAliases.ShouldHaveSingleItem().ToAlias().TitlePattern.ShouldBeNull();
+        loaded.Categories.Select(g => (g.Name, string.Join(",", g.Keywords))).ShouldBe(
+            [("Investigator", "investigator,research"), ("Prizm", "prizm")]);
     }
 
     [Fact]

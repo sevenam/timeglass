@@ -9,8 +9,8 @@ namespace Timeglass.Core.Reporting;
 /// <param name="Away">Total away time in the range.</param>
 /// <param name="Days">One entry per day, in date order, including days without any time.</param>
 /// <param name="Apps">
-/// Active time per app over the whole range, longest first, with shares of <paramref name="Active"/>
-/// whose percentages add up to exactly 100.
+/// Active time per app over the whole range, longest first, with shares of <paramref name="Active"/>.
+/// In a keyword-category summary, the entries also include away time and shares are of active plus away.
 /// </param>
 public sealed record RangeSummary(
     DateOnly FirstDay,
@@ -28,7 +28,7 @@ public sealed record RangeSummary(
 /// <param name="End">First instant of the next day (exclusive).</param>
 /// <param name="Active">Active time in the day.</param>
 /// <param name="Away">Away time in the day.</param>
-/// <param name="Apps">Active time per app that day, longest first, as in <see cref="DaySummary.Apps"/>.</param>
+/// <param name="Apps">Active time per app that day, or categories including away time in a keyword-category summary.</param>
 public sealed record DayTotal(
     DateOnly Day,
     DateTimeOffset Start,

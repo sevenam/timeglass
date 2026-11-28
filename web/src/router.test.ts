@@ -37,6 +37,31 @@ describe('parseRoute', () => {
     expect(parseRoute(paths.week('2026-11-02'))).toEqual({ name: 'week', date: '2026-11-02' });
     expect(parseRoute(paths.settings())).toEqual({ name: 'settings' });
     expect(parseRoute(paths.trends())).toEqual({ name: 'trends' });
+    expect(parseRoute(paths.category('2026-11-02', '2026-11-08', 'R&D / Prizm', 'week'))).toEqual({
+      name: 'category',
+      from: '2026-11-02',
+      to: '2026-11-08',
+      categoryName: 'R&D / Prizm',
+      source: 'week',
+    });
+    expect(
+      parseRoute(paths.categoryApp('2026-11-02', '2026-11-08', 'R&D / Prizm', 'week', 'app/a b')),
+    ).toEqual({
+      name: 'categoryApp',
+      from: '2026-11-02',
+      to: '2026-11-08',
+      categoryName: 'R&D / Prizm',
+      source: 'week',
+      appKey: 'app/a b',
+    });
+    expect(parseRoute(paths.categoryBack('2026-10-30', '2026-11-05', 'trends'))).toEqual({
+      name: 'trends',
+      view: 'categories',
+      period: 7,
+    });
+    expect(parseRoute('/category/2026-11-02/2026-11-08?category=A&source=invalid')).toEqual({
+      name: 'notFound',
+    });
   });
 });
 

@@ -18,6 +18,7 @@ const block = (overrides: Partial<TimelineBlockDto> = {}): TimelineBlockDto => (
   end: `${demoDate}T09:00:00+01:00`,
   durationMs: 3_600_000,
   isOpen: false,
+  category: null,
   ...overrides,
 });
 

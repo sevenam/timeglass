@@ -34,6 +34,19 @@ describe('AppView', () => {
     expect(screen.getByText('Active').nextElementSibling).toHaveTextContent('3h');
   });
 
+  it('shows only this application on the timeline using its list colour', async () => {
+    renderWithApi(<AppView date={demoDate} appKey="vscode" />);
+    const lane = await screen.findByRole('group', { name: /Timeline of the day/ });
+    const blocks = within(lane).getAllByRole('button');
+    expect(blocks).toHaveLength(2);
+    expect(blocks.every((block) => block.dataset.app === 'vscode')).toBe(true);
+    expect(blocks[0]?.style.backgroundColor).toBe(
+      screen
+        .getByRole('heading', { name: 'Visual Studio Code' })
+        .querySelector<HTMLElement>('.app-day__swatch')?.style.backgroundColor,
+    );
+  });
+
   it('lists every title longest first with time and share of the app', async () => {
     renderWithApi(<AppView date={demoDate} appKey="vscode" />);
 

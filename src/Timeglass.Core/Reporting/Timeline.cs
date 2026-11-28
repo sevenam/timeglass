@@ -25,10 +25,12 @@ public sealed record DayTimeline(
 /// Time actually tracked in the block: <c>End - Start</c> less the short gaps that were merged over.
 /// </param>
 /// <param name="IsOpen">True if the block ends with the interval that is still running.</param>
+/// <param name="Category">The matching category, otherwise null.</param>
 public sealed record TimelineBlock(
     IntervalKind Kind,
     AppIdentity? App,
     DateTimeOffset Start,
     DateTimeOffset End,
     TimeSpan Duration,
-    bool IsOpen);
+    bool IsOpen,
+    AppIdentity? Category = null);

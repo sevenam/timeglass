@@ -1,5 +1,5 @@
 import type { AppTotalDto } from '../api/client.ts';
-import { OTHER_COLOR } from './appColor.ts';
+import { appColor, OTHER_COLOR } from './appColor.ts';
 import { appShares } from './appShares.ts';
 
 const app = (key: string, minutes: number, percent: number): AppTotalDto => ({
@@ -8,6 +8,14 @@ const app = (key: string, minutes: number, percent: number): AppTotalDto => ({
   share: percent / 100,
   percent,
   color: `color-${key}`,
+});
+
+describe('appColor', () => {
+  it('is deterministic and returns a valid hsl colour', () => {
+    expect(appColor('vscode')).toBe(appColor('vscode'));
+    expect(appColor('vscode')).not.toBe(appColor('outlook'));
+    expect(appColor('anything')).toMatch(/^hsl\(\d{1,3} [\d.]+% [\d.]+%\)$/);
+  });
 });
 
 describe('appShares', () => {
@@ -22,6 +30,22 @@ describe('appShares', () => {
     const rows = appShares([app('a', 10, 20), app('b', 40, 80)]);
 
     expect(rows.map((r) => r.key)).toEqual(['b', 'a']);
+  });
+
+  it('uses the persistent colours supplied by the API', () => {
+    const first = appShares([app('app-19', 10, 50), app('app-24', 20, 50)]);
+    const second = appShares([app('app-24', 10, 50), app('app-19', 20, 50), app('new-app', 5, 1)]);
+    const colors = (rows: typeof first) =>
+      Object.fromEntries(rows.map((row) => [row.key, row.color]));
+
+    expect(colors(first)['app-19']).toBe('color-app-19');
+    expect(colors(second)['app-19']).toBe(colors(first)['app-19']);
+    expect(colors(second)['app-24']).toBe(colors(first)['app-24']);
+  });
+
+  it('keeps fallback colours distinct across many keys', () => {
+    const colors = Array.from({ length: 400 }, (_, i) => appColor(`key-${i}`));
+    expect(new Set(colors).size).toBe(400);
   });
 
   it('never folds apps into Other, however many there are (#96)', () => {

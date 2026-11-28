@@ -39,6 +39,81 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
     private async Task<HttpResponseMessage> PutAsync(SettingsDto settings) =>
         await _host.Client.PutAsJsonAsync(new Uri("/api/settings", UriKind.Relative), settings, JsonSerializerOptions.Web, Ct);
 
+    [Fact]
+    public async Task Categories_round_trip_and_category_title_time()
+    {
+        using var response = await PutAsync(Defaults with
+        {
+            Categories = [new("Code work", ["late"]), new("Mail", ["outlook"])],
+        });
+        response.StatusCode.ShouldBe(HttpStatusCode.OK);
+
+        var saved = await _host.GetJsonAsync<SettingsDto>("/api/settings", Ct);
+        saved.Categories!.Select(g => g.Name).ShouldBe(["Code work", "Mail"]);
+        var result = await _host.GetJsonAsync<RangeSummaryDto>("/api/range/categories?from=2026-11-03&to=2026-11-04", Ct);
+        result.Apps.Select(a => (a.App.Name, a.DurationMs)).ShouldBe(
+            [("Code work", 10_800_000L), ("Mail", 3_600_000L), ("Ungrouped", 3_600_000L)]);
+        var detail = await _host.GetJsonAsync<RangeSummaryDto>(
+            "/api/range/category-applications?from=2026-11-03&to=2026-11-04&category=Code%20work", Ct);
+        detail.ActiveMs.ShouldBe(10_800_000L);
+        detail.Apps.Select(a => (a.App.Name, a.DurationMs)).ShouldBe([("Code", 10_800_000L)]);
+        var titles = await _host.GetJsonAsync<CategoryAppTitlesDto>(
+            "/api/range/category-application-titles?from=2026-11-03&to=2026-11-04&category=Code%20work&appKey=code", Ct);
+        titles.TotalMs.ShouldBe(detail.ActiveMs);
+        titles.Titles.Select(t => (t.Title, t.DurationMs)).ShouldBe(
+            [("late.cs", 7_200_000L), ("later.cs", 3_600_000L)]);
+    }
+
+    [Fact]
+    public async Task Category_range_includes_tracked_away_without_changing_active_totals()
+    {
+        await using var host = await StartAsync(Now,
+        [
+            Active("2026-11-03T08:00Z", "2026-11-03T09:00Z", Code, "main.cs"),
+            Away("2026-11-03T09:00Z", "2026-11-03T09:30Z"),
+        ], Ct);
+        var result = await host.GetJsonAsync<RangeSummaryDto>("/api/range/categories?from=2026-11-03&to=2026-11-03", Ct);
+
+        result.ActiveMs.ShouldBe(3_600_000L);
+        result.AwayMs.ShouldBe(1_800_000L);
+        result.Apps.Select(a => (a.App.Key, a.DurationMs, a.Percent))
+            .ShouldBe([("ungrouped", 3_600_000L, 67), ("away", 1_800_000L, 33)]);
+        result.Days.Single().Apps.Single(a => a.App.Key == "away").DurationMs.ShouldBe(1_800_000L);
+    }
+
+    [Fact]
+    public async Task Unknown_category_is_rejected_rather_than_showing_another_category()
+    {
+        using var response = await _host.Client.GetAsync(
+            new Uri("/api/range/category-applications?from=2026-11-03&to=2026-11-04&category=Missing", UriKind.Relative), Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Group_application_titles_require_an_application_key()
+    {
+        using var response = await _host.Client.GetAsync(
+            new Uri("/api/range/category-application-titles?from=2026-11-03&to=2026-11-04&category=Ungrouped", UriKind.Relative), Ct);
+        response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Categories_reject_duplicate_names_and_keep_existing_when_omitted()
+    {
+        _host.Settings.Current = new TimeglassSettings
+        {
+            Categories = [new CategorySetting { Name = "Existing", Keywords = ["code"] }],
+        };
+        using var invalid = await PutAsync(Defaults with
+        {
+            Categories = [new("same", ["one"]), new("SAME", ["two"])],
+        });
+        invalid.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
+        using var omitted = await PutAsync(Defaults);
+        omitted.StatusCode.ShouldBe(HttpStatusCode.OK);
+        _host.Settings.Current.Categories.Single().Name.ShouldBe("Existing");
+    }
+
     private async Task<JsonObject> ErrorsAsync(HttpResponseMessage response)
     {
         response.StatusCode.ShouldBe(HttpStatusCode.BadRequest);
@@ -104,7 +179,7 @@ public sealed class SettingsEndpointTests : IAsyncLifetime
         settings.ExcludedApps.ShouldBe(["keepass"]);
         settings.IdleExemptApps.ShouldBeEmpty();
         settings.RecordWindowTitles.ShouldBeFalse();
-        settings.AppAliases.Select(a => (a.Key, a.Name, a.Exes.Count, a.TitlePattern)).ShouldBe([("outlook", "Mail", 0, (string?)null)]);
+        settings.AppAliases.Select(a => (a.Key, a.Name, a.Exes.Count, a.TitlePattern)).ShouldBe([("outlook", "Mail", 0, null)]);
         settings.StartWithWindows.ShouldBe(true);
     }
 

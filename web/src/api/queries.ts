@@ -8,9 +8,15 @@ export const queryKeys = {
   status: ['status'] as const,
   day: (date: string) => ['days', date] as const,
   daySummary: (date: string) => ['days', date, 'summary'] as const,
-  timeline: (date: string) => ['days', date, 'timeline'] as const,
+  timeline: (date: string, byCategory = false) =>
+    ['days', date, 'timeline', { byCategory }] as const,
   appDay: (date: string, appKey: string) => ['days', date, 'apps', appKey] as const,
   range: (from: string, to: string) => ['range', from, to] as const,
+  categoryRange: (from: string, to: string) => ['categories', from, to] as const,
+  categoryApplications: (from: string, to: string, category: string) =>
+    ['categories', 'applications', from, to, category] as const,
+  categoryAppTitles: (from: string, to: string, category: string, appKey: string) =>
+    ['categories', 'titles', from, to, category, appKey] as const,
   settings: ['settings'] as const,
 };
 
@@ -34,12 +40,17 @@ export function useDaySummary(date: string) {
 }
 
 /** What happened when on `date`. */
-export function useTimeline(date: string) {
+export function useTimeline(date: string, byCategory = false) {
   const api = useApiClient();
   return useQuery({
-    queryKey: queryKeys.timeline(date),
+    queryKey: queryKeys.timeline(date, byCategory),
     queryFn: ({ signal }) =>
-      unwrap(api.GET('/api/days/{date}/timeline', { params: { path: { date } }, signal })),
+      unwrap(
+        api.GET('/api/days/{date}/timeline', {
+          params: { path: { date }, query: byCategory ? { byCategory: true } : {} },
+          signal,
+        }),
+      ),
   });
 }
 
@@ -66,6 +77,44 @@ export function useRangeSummary(from: string, to: string, { enabled = true } = {
   });
 }
 
+export function useCategoryRangeSummary(from: string, to: string, { enabled = true } = {}) {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.categoryRange(from, to),
+    enabled,
+    queryFn: ({ signal }) =>
+      unwrap(api.GET('/api/range/categories', { params: { query: { from, to } }, signal })),
+  });
+}
+
+export function useCategoryApplications(from: string, to: string, category: string) {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.categoryApplications(from, to, category),
+    queryFn: ({ signal }) =>
+      unwrap(
+        api.GET('/api/range/category-applications', {
+          params: { query: { from, to, category } },
+          signal,
+        }),
+      ),
+  });
+}
+
+export function useCategoryAppTitles(from: string, to: string, category: string, appKey: string) {
+  const api = useApiClient();
+  return useQuery({
+    queryKey: queryKeys.categoryAppTitles(from, to, category, appKey),
+    queryFn: ({ signal }) =>
+      unwrap(
+        api.GET('/api/range/category-application-titles', {
+          params: { query: { from, to, category, appKey } },
+          signal,
+        }),
+      ),
+  });
+}
+
 /** The settings the dashboard can change (#36). */
 export function useSettings() {
   const api = useApiClient();
@@ -87,6 +136,7 @@ export function useSaveSettings() {
     onSuccess: async (saved) => {
       queryClient.setQueryData(queryKeys.settings, saved);
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['categories'] }),
         queryClient.invalidateQueries({ queryKey: ['days'] }),
         queryClient.invalidateQueries({ queryKey: ['range'] }),
       ]);

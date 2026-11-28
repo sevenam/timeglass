@@ -1,5 +1,6 @@
 using Timeglass.Core.Domain;
 using Timeglass.Core.Reporting;
+using Timeglass.Core.Settings;
 
 namespace Timeglass.Core.Ports;
 
@@ -47,6 +48,12 @@ public interface IReportingQueries
         CancellationToken cancellationToken = default,
         AfterHoursOptions? afterHours = null);
 
+    /// <summary>Timeline annotated with matching categories.</summary>
+    Task<DayTimeline> GetCategoryTimelineAsync(
+        DateOnly day, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null);
+
     /// <summary>
     /// One app's time by window title over local days <paramref name="firstDay"/> to
     /// <paramref name="lastDay"/>, both included; see <see cref="TitleBreakdowns.Build"/>.
@@ -87,6 +94,24 @@ public interface IReportingQueries
         DateTimeOffset now,
         TimeSpan dayStart = default,
         CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null);
+
+    /// <summary>Totals per day and category over a range of local days.</summary>
+    Task<RangeSummary> GetCategoryRangeSummaryAsync(
+        DateOnly firstDay, DateOnly lastDay, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null);
+
+    /// <summary>Applications contributing to one category over a range of local days.</summary>
+    Task<RangeSummary> GetCategoryApplicationsAsync(
+        DateOnly firstDay, DateOnly lastDay, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, string categoryName, CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null);
+
+    /// <summary>Titles for an application's time assigned to a category over a range.</summary>
+    Task<TitleBreakdown> GetCategoryApplicationTitlesAsync(
+        DateOnly firstDay, DateOnly lastDay, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, string categoryName, string appKey, CancellationToken cancellationToken = default,
         AfterHoursOptions? afterHours = null);
 
     /// <summary>

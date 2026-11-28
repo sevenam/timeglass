@@ -9,6 +9,17 @@ function link(name: string | RegExp) {
 }
 
 describe('DateNav for a day', () => {
+  it('preserves category view on all navigation paths', () => {
+    render(<DateNav view="day" date="2026-11-03" today={today} categoryView="categories" />);
+
+    expect(link('Previous day')).toHaveAttribute('href', '/day/2026-11-02?view=categories');
+    expect(link('Next day')).toHaveAttribute('href', '/day/2026-11-04?view=categories');
+    expect(link('Today')).toHaveAttribute('href', '/?view=categories');
+    expect(link('Week')).toHaveAttribute('href', '/week/2026-11-02?view=categories');
+    fireEvent.change(screen.getByLabelText('Go to a date'), { target: { value: '2026-10-20' } });
+    expect(globalThis.location.search).toBe('?view=categories');
+  });
+
   it('links to the previous and next day, today and the week', () => {
     render(<DateNav view="day" date="2026-11-03" today={today} />);
 
@@ -100,6 +111,18 @@ describe('DateNav for a day', () => {
 });
 
 describe('DateNav for a week', () => {
+  it('preserves category view when switching to today or moving weeks', async () => {
+    const user = userEvent.setup();
+    render(<DateNav view="week" date="2026-11-02" today={today} categoryView="categories" />);
+
+    expect(link('Day')).toHaveAttribute('href', '/?view=categories');
+    expect(link('This week')).toHaveAttribute('href', '/week/2026-11-02?view=categories');
+    await user.keyboard('{ArrowLeft}');
+    expect(globalThis.location.pathname + globalThis.location.search).toBe(
+      '/week/2026-10-26?view=categories',
+    );
+  });
+
   it('links to the previous and next week by their Mondays', () => {
     render(<DateNav view="week" date="2026-10-28" today={today} />);
 

@@ -27,6 +27,46 @@ const chartLines = () =>
   [...document.querySelectorAll('.trend-chart__series')].map((g) => g.getAttribute('data-app'));
 
 describe('TrendsView', () => {
+  it('draws category trends and offers category choices', async () => {
+    const range = rangeSummary('2026-10-07', demoDate);
+    const renamed = (app: (typeof range.apps)[number]) => ({
+      ...app,
+      app: { key: 'category-0', name: 'Investigator' },
+    });
+    const away = (durationMs: number) => ({
+      app: { key: 'away', name: 'Away' },
+      durationMs,
+      share: 0,
+      percent: 0,
+    });
+    server.use(
+      http.get('/api/range/categories', () =>
+        HttpResponse.json({
+          ...range,
+          apps: [...range.apps.slice(0, 1).map(renamed), away(range.awayMs)],
+          days: range.days.map((day) => ({
+            ...day,
+            apps: [
+              ...day.apps.slice(0, 1).map(renamed),
+              ...(day.awayMs > 0 ? [away(day.awayMs)] : []),
+            ],
+          })),
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithApi(<TrendsView today={demoDate} />);
+    await appTable();
+    await user.click(screen.getByRole('button', { name: 'Category' }));
+    const table = await screen.findByRole('table', { name: /The categories in the chart/ });
+    expect(table).toHaveTextContent('Investigator');
+    expect(screen.getByLabelText('Category')).toHaveTextContent('Investigator');
+    expect(chartLines()).toEqual(['category-0', 'away']);
+    expect(within(table).queryByRole('link', { name: 'Away' })).not.toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAccessibleName(/Average tracked time per day/);
+    await user.selectOptions(screen.getByLabelText('Category'), 'Away');
+    expect(chartLines()).toEqual(['away']);
+  });
   it('asks for the last 30 days, ending today', async () => {
     let asked = '';
     server.use(

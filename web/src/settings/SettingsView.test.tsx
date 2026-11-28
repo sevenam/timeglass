@@ -30,6 +30,47 @@ async function renderSettings(current: SettingsDto = settings()) {
 }
 
 describe('SettingsView', () => {
+  it('saves categories in priority order', async () => {
+    const saved = captureSaves();
+    const user = await renderSettings();
+    expect(screen.getByText('No categories yet.')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add category' }));
+    await user.type(screen.getByRole('textbox', { name: 'Category 1 name' }), 'Investigator');
+    await user.type(
+      screen.getByRole('textbox', { name: 'Keywords, category 1' }),
+      'investigator, research',
+    );
+    await user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await screen.findByText(/Saved\. The new settings apply right away/);
+    expect(saved[0]?.categories).toEqual([
+      { name: 'Investigator', keywords: ['investigator', 'research'] },
+    ]);
+  });
+
+  it('reorders and removes categories without losing their keywords', async () => {
+    const saved = captureSaves();
+    const user = await renderSettings(
+      settings({
+        categories: [
+          { name: 'Investigator', keywords: ['research', 'investigator'] },
+          { name: 'Prizm', keywords: ['prizm'] },
+          { name: 'Other', keywords: ['other'] },
+        ],
+      }),
+    );
+    expect(screen.getByRole('button', { name: 'Move category 1 up' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Move category 3 down' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'Move category 2 up' }));
+    expect(screen.getByRole('textbox', { name: 'Category 1 name' })).toHaveValue('Prizm');
+    expect(screen.getByRole('textbox', { name: 'Keywords, category 1' })).toHaveValue('prizm');
+    await user.click(screen.getByRole('button', { name: 'Remove category 3' }));
+    await user.click(screen.getByRole('button', { name: 'Save settings' }));
+    await screen.findByText(/Saved\. The new settings apply right away/);
+    expect(saved[0]?.categories).toEqual([
+      { name: 'Prizm', keywords: ['prizm'] },
+      { name: 'Investigator', keywords: ['research', 'investigator'] },
+    ]);
+  });
   it('shows the current settings', async () => {
     await renderSettings(
       settings({

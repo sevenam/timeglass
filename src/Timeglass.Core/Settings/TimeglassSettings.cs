@@ -56,6 +56,9 @@ public sealed class TimeglassSettings : IValidatableObject
     /// </summary>
     public List<AppAliasSetting> AppAliases { get; set; } = [];
 
+    /// <summary>Categories matched by ordered application-name and window-title keywords.</summary>
+    public List<CategorySetting> Categories { get; set; } = [];
+
     /// <summary>
     /// How many months of intervals (window titles, the timeline) are kept. Older days are reduced
     /// to their totals per app (#41). <see langword="null"/>, the default, keeps everything.
@@ -125,6 +128,23 @@ public sealed class TimeglassSettings : IValidatableObject
     /// <inheritdoc />
     public IEnumerable<ValidationResult> Validate(ValidationContext validationContext)
     {
+        if (Categories is not null)
+        {
+            if (Categories.Any(g => g is null || string.IsNullOrWhiteSpace(g.Name)
+                || g.Keywords is null || g.Keywords.Count == 0 || g.Keywords.Any(string.IsNullOrWhiteSpace)))
+            {
+                yield return new ValidationResult("Each category needs a name and at least one non-empty keyword.", [nameof(Categories)]);
+            }
+
+            var names = Categories.Where(g => g is not null && !string.IsNullOrWhiteSpace(g.Name))
+                .Select(g => g.Name.Trim()).ToList();
+            if (names.Distinct(StringComparer.OrdinalIgnoreCase).Count() != names.Count
+                || names.Contains("Ungrouped", StringComparer.OrdinalIgnoreCase))
+            {
+                yield return new ValidationResult("Category names must be unique and cannot be Ungrouped.", [nameof(Categories)]);
+            }
+        }
+
         foreach (var (name, keys) in new[]
         {
             (nameof(IdleExemptApps), IdleExemptApps),
@@ -175,6 +195,16 @@ public sealed class TimeglassSettings : IValidatableObject
             yield return new ValidationResult($"{nameof(AppAliases)}: {error}", [nameof(AppAliases)]);
         }
     }
+}
+
+/// <summary>A named category and the keywords that match it, in priority order.</summary>
+public sealed class CategorySetting
+{
+    /// <summary>Display name of the category.</summary>
+    public string Name { get; set; } = string.Empty;
+
+    /// <summary>Case-insensitive substrings matched against application names and window titles.</summary>
+    public List<string> Keywords { get; set; } = [];
 }
 
 /// <summary>One entry of <see cref="TimeglassSettings.AppAliases"/>; see <see cref="AppAlias"/>.</summary>

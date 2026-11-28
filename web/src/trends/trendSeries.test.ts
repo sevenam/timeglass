@@ -53,6 +53,14 @@ describe('trendSeries', () => {
     expect(trend.maxMs).toBe(45 * MINUTE);
   });
 
+  it('keeps the same colours when limiting or picking an app', () => {
+    const all = trendSeries(week).series;
+    const limited = trendSeries(week, { limit: 3 }).series;
+    const picked = trendSeries(week, { appKey: 'vscode' }).series;
+    expect(limited.map((s) => s.color)).toEqual(all.slice(0, 3).map((s) => s.color));
+    expect(picked[0]?.color).toBe(all.find((s) => s.key === 'vscode')?.color);
+  });
+
   it('has no lines for an app not in the range', () => {
     const trend = trendSeries(week, { appKey: 'nope' });
 

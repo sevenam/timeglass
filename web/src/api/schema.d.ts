@@ -82,6 +82,60 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/range/categories': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Totals per category over a range of days
+     * @description Includes tracked away time as a built-in category. Category shares are of active plus away time.
+     */
+    get: operations['GetCategoryRangeSummary'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/range/category-applications': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Applications contributing to one category over a range of days */
+    get: operations['GetCategoryApplications'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/range/category-application-titles': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Titles contributing to one application's time in a category */
+    get: operations['GetCategoryApplicationTitles'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/status': {
     parameters: {
       query?: never;
@@ -253,18 +307,18 @@ export interface components {
       /** @description Display name, e.g. `Outlook`. */
       name: string;
     };
-    /** @description One app's share of the active time. */
+    /** @description One app's or category's share of the time. */
     AppTotalDto: {
-      /** @description The app. */
+      /** @description The app or category. */
       app: components['schemas']['AppDto'];
       /**
        * Format: int64
-       * @description Active time in the app, in milliseconds.
+       * @description Time in the app or category, in milliseconds.
        */
       durationMs: number;
       /**
        * Format: double
-       * @description Exact fraction of the active time, between 0 and 1.
+       * @description Exact fraction of active time, or active plus away for categories, between 0 and 1.
        */
       share: number;
       /**
@@ -274,6 +328,25 @@ export interface components {
       percent: number;
       /** @description Persistent display colour for the app. */
       color: string;
+    };
+    /** @description One application's titles assigned to a category over a range. */
+    CategoryAppTitlesDto: {
+      /** @description The application. */
+      app: components['schemas']['AppDto'];
+      /**
+       * Format: int64
+       * @description Active time assigned to the category, in milliseconds.
+       */
+      totalMs: number;
+      /** @description Titles and time without an available title, longest first. */
+      titles: components['schemas']['TitleTotalDto'][];
+    };
+    /** @description A named category of keywords, matched in the order categories are listed. */
+    CategoryDto: {
+      /** @description Category name. */
+      name: string;
+      /** @description Case-insensitive substrings to match. */
+      keywords: string[];
     };
     /** @description Where the time went on one local day. */
     DaySummaryDto: {
@@ -347,7 +420,7 @@ export interface components {
        * @description Away time, in milliseconds.
        */
       awayMs: number;
-      /** @description Every app used that day, longest first; shares are of the whole day. */
+      /** @description Every app used that day, or categories including away time; longest first. */
       apps: components['schemas']['AppTotalDto'][];
     };
     /** @description Confirms a deletion. */
@@ -474,7 +547,7 @@ export interface components {
       awayMs: number;
       /** @description One entry per day in date order, including days without any time. */
       days: components['schemas']['DayTotalDto'][];
-      /** @description Active time per app over the whole range, longest first. */
+      /** @description Active time per app, or categories including away time; longest first. */
       apps: components['schemas']['AppTotalDto'][];
     };
     /** @description The settings the dashboard can change; the rest of `settings.json` is kept as it is. */
@@ -506,6 +579,8 @@ export interface components {
        * @description Minutes after local midnight that work hours end, after the start and at most 1439; null keeps the current value (write).
        */
       workHoursEndMinutes?: null | number;
+      /** @description Ordered categories of keywords, or null to leave them unchanged. */
+      categories?: null | components['schemas']['CategoryDto'][];
       /** @description Whether to exclude qualifying after-hours returns; null keeps the current value (write). */
       discardAfterHoursReturns?: null | boolean;
       /**
@@ -567,6 +642,7 @@ export interface components {
       durationMs: number;
       /** @description True if the block is still running. */
       isOpen: boolean;
+      category: null | components['schemas']['AppDto'];
     };
     /** @description What happened when on one local day. */
     TimelineDto: {
@@ -656,7 +732,10 @@ export interface operations {
   };
   GetTimeline: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description Include the matching category on each active block. */
+        byCategory?: boolean;
+      };
       header?: never;
       path: {
         /** @description Local date, yyyy-MM-dd. */
@@ -741,6 +820,114 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RangeSummaryDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['HttpValidationProblemDetails'];
+        };
+      };
+    };
+  };
+  GetCategoryRangeSummary: {
+    parameters: {
+      query?: {
+        /** @description First local date, yyyy-MM-dd. Required. */
+        from?: string;
+        /** @description Last local date, yyyy-MM-dd, included. Required. */
+        to?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RangeSummaryDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['HttpValidationProblemDetails'];
+        };
+      };
+    };
+  };
+  GetCategoryApplications: {
+    parameters: {
+      query?: {
+        /** @description First local date, yyyy-MM-dd. Required. */
+        from?: string;
+        /** @description Last local date, yyyy-MM-dd, included. Required. */
+        to?: string;
+        /** @description Name of the category, or Ungrouped. */
+        category?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RangeSummaryDto'];
+        };
+      };
+      /** @description Bad Request */
+      400: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/problem+json': components['schemas']['HttpValidationProblemDetails'];
+        };
+      };
+    };
+  };
+  GetCategoryApplicationTitles: {
+    parameters: {
+      query?: {
+        /** @description First local date, yyyy-MM-dd. Required. */
+        from?: string;
+        /** @description Last local date, yyyy-MM-dd, included. Required. */
+        to?: string;
+        /** @description Name of the category, or Ungrouped. */
+        category?: string;
+        /** @description The application's key. */
+        appKey?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description OK */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CategoryAppTitlesDto'];
         };
       };
       /** @description Bad Request */

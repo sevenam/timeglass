@@ -8,6 +8,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Timeglass.Core.Domain;
 using Timeglass.Core.Ports;
 using Timeglass.Core.Reporting;
+using Timeglass.Core.Settings;
 
 namespace Timeglass.Storage;
 
@@ -305,6 +306,17 @@ public sealed class IntervalRepository : IIntervalSink, IReportingQueries, IAsyn
         return Timelines.ForDay(FilterAfterHours(intervals, zone, afterHours), day, zone, now, dayStart, mergeGap);
     }
 
+    /// <inheritdoc />
+    public async Task<DayTimeline> GetCategoryTimelineAsync(
+        DateOnly day, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null)
+    {
+        var (from, to) = DaySummaries.Bounds(day, zone);
+        var intervals = await GetReportIntervalsAsync(from, to, zone, afterHours, cancellationToken).ConfigureAwait(false);
+        return Timelines.ForDay(FilterAfterHours(intervals, zone, afterHours), day, zone, now, categories: categories);
+    }
+
     /// <summary>
     /// One app's time grouped by window title over local days <paramref name="firstDay"/> to
     /// <paramref name="lastDay"/> (both included), every title listed (<see cref="TitleBreakdowns.Build"/>).
@@ -397,6 +409,44 @@ public sealed class IntervalRepository : IIntervalSink, IReportingQueries, IAsyn
         }
 
         return intervals;
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeSummary> GetCategoryRangeSummaryAsync(
+        DateOnly firstDay, DateOnly lastDay, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null)
+    {
+        var (from, to) = RangeSummaries.Bounds(firstDay, lastDay, zone);
+        var intervals = await GetReportIntervalsAsync(from, to, zone, afterHours, cancellationToken).ConfigureAwait(false);
+        var rolledUp = await GetRolledUpAsync(firstDay, lastDay, cancellationToken).ConfigureAwait(false);
+        return Categories.Build(FilterAfterHours(intervals, zone, afterHours), rolledUp, firstDay, lastDay, zone, now, categories);
+    }
+
+    /// <inheritdoc />
+    public async Task<RangeSummary> GetCategoryApplicationsAsync(
+        DateOnly firstDay, DateOnly lastDay, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, string categoryName, CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null)
+    {
+        var (from, to) = RangeSummaries.Bounds(firstDay, lastDay, zone);
+        var intervals = await GetReportIntervalsAsync(from, to, zone, afterHours, cancellationToken).ConfigureAwait(false);
+        var rolledUp = await GetRolledUpAsync(firstDay, lastDay, cancellationToken).ConfigureAwait(false);
+        return Categories.BuildForCategory(FilterAfterHours(intervals, zone, afterHours), rolledUp, firstDay, lastDay, zone, now, categories, categoryName);
+    }
+
+    /// <inheritdoc />
+    public async Task<TitleBreakdown> GetCategoryApplicationTitlesAsync(
+        DateOnly firstDay, DateOnly lastDay, TimeZoneInfo zone, DateTimeOffset now,
+        IReadOnlyList<CategorySetting> categories, string categoryName, string appKey, CancellationToken cancellationToken = default,
+        AfterHoursOptions? afterHours = null)
+    {
+        var (from, to) = RangeSummaries.Bounds(firstDay, lastDay, zone);
+        var intervals = afterHours?.Enabled == true
+            ? await GetReportIntervalsAsync(from, to, zone, afterHours, cancellationToken).ConfigureAwait(false)
+            : await QueryRangeAsync(from, to, appKey, cancellationToken).ConfigureAwait(false);
+        var rolledUp = await GetRolledUpAsync(firstDay, lastDay, cancellationToken).ConfigureAwait(false);
+        return Categories.BuildCategoryAppTitles(FilterAfterHours(intervals, zone, afterHours), rolledUp, firstDay, lastDay, zone, now, categories, categoryName, appKey);
     }
 
     /// <summary>

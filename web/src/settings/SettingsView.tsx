@@ -7,6 +7,7 @@ import { AliasEditor } from './AliasEditor.tsx';
 import { AppKeyList, FieldErrorList } from './AppKeyList.tsx';
 import { DeleteData } from './DeleteData.tsx';
 import { ExportData } from './ExportData.tsx';
+import { CategoryEditor } from './CategoryEditor.tsx';
 import {
   toForm,
   toSettings,
@@ -25,6 +26,7 @@ const FIELDS = new Set([
   'excludedApps',
   'appsWithoutTitles',
   'appAliases',
+  'categories',
   'workHoursStartMinutes',
   'workHoursEndMinutes',
   'afterHoursMinimumAwayMinutes',
@@ -275,6 +277,15 @@ function SettingsEditor({ initial, today }: { initial: SettingsDto; today: strin
           rows={form.aliases}
           onChange={(aliases) => change({ aliases })}
           errors={errors.appAliases}
+        />
+      </section>
+
+      <section className="settings__section" aria-labelledby="settings-categories">
+        <h3 id="settings-categories">Categories</h3>
+        <CategoryEditor
+          rows={form.categories}
+          onChange={(categories) => change({ categories })}
+          errors={errors.categories}
         />
       </section>
 

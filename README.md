@@ -153,6 +153,20 @@ $api = Get-Content "$env:LOCALAPPDATA\Timeglass\api.json" | ConvertFrom-Json
 Invoke-RestMethod "http://127.0.0.1:$($api.port)/api/status" -Headers @{ Authorization = "Bearer $($api.token)" }
 ```
 
+### Categories
+
+In _Settings_, add named categories and choose their priority. Keywords match substrings of
+application names and recorded window titles without regard to case. The first matching category
+gets the time; the rest appears as _Ungrouped_. Choose **View by: Category** on the day, week or
+trends screen to see these totals. Select a category, then an application, to see the window titles
+assigned to that category for the selected period. The day timeline remains coloured by application.
+Tracked away time is automatically included as an Away category; category percentages include both
+active and away time. Away has no application or title drill-down.
+Each application or category keeps the same colour across day, week, and trends views.
+
+Time without a recorded title can match only its application name. This also applies to older
+time whose titles have been removed by retention.
+
 ### Exporting your data
 
 The _Settings_ page has an _Export recorded time_ section: pick the days, the rows (every
@@ -246,6 +260,7 @@ settings at startup stop the app with a message that names the problem.
 | `excludedApps`       | `[]`            | App keys that are not tracked at all: while one is in front, nothing is stored. |
 | `appsWithoutTitles`  | `[]`            | App keys whose time is tracked but whose window titles are never stored.        |
 | `appAliases`         | `[]`            | Renames and extra apps on top of the built-in aliases, see below.               |
+| `categories`         | `[]`            | Ordered categories matched against application names and window titles.        |
 | `workHoursStart`     | `"09:00:00"`    | When work hours begin, for the _Workday_ on the main screen.                    |
 | `workHoursEnd`       | `"17:00:00"`    | When work hours end; after `workHoursStart`.                                    |
 | `discardAfterHoursReturns` | `false` | Exclude a short final after-hours return and its preceding absence from analysis. |

@@ -11,6 +11,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.OpenApi;
 using Timeglass.Core.Ports;
 using Timeglass.Core.Reporting;
+using Timeglass.Core.Settings;
 
 namespace Timeglass.Api;
 
@@ -136,6 +137,22 @@ public static partial class TimeglassApi
             .WithSummary("Totals per day and per app over a range of days")
             .WithDescription($"For the week view. A range is at most {RangeSummaries.MaxDays} days.");
 
+        api.MapGet("/range/categories", GetCategoryRangeSummaryAsync)
+            .WithName("GetCategoryRangeSummary")
+            .WithTags("Ranges")
+            .WithSummary("Totals per category over a range of days")
+            .WithDescription("Includes tracked away time as a built-in category. Category shares are of active plus away time.");
+
+        api.MapGet("/range/category-applications", GetCategoryApplicationsAsync)
+            .WithName("GetCategoryApplications")
+            .WithTags("Ranges")
+            .WithSummary("Applications contributing to one category over a range of days");
+
+        api.MapGet("/range/category-application-titles", GetCategoryApplicationTitlesAsync)
+            .WithName("GetCategoryApplicationTitles")
+            .WithTags("Ranges")
+            .WithSummary("Titles contributing to one application's time in a category");
+
         api.MapGet("/status", GetStatusAsync)
             .WithName("GetStatus")
             .WithTags("Status")
@@ -165,6 +182,7 @@ public static partial class TimeglassApi
 
     private static async Task<Results<Ok<TimelineDto>, ValidationProblem>> GetTimelineAsync(
         [Description("Local date, yyyy-MM-dd.")] string date,
+        [Description("Include the matching category on each active block.")] bool? byCategory,
         [FromServices] IReportingQueries reports,
         [FromServices] ISettingsStore settings,
         [FromServices] TimeProvider time,
@@ -175,7 +193,9 @@ public static partial class TimeglassApi
             return InvalidDate(nameof(date), date);
         }
 
-        var timeline = await reports.GetTimelineAsync(day, time.LocalTimeZone, time.GetUtcNow(), cancellationToken: cancellationToken, afterHours: settings.Current.ToAfterHoursOptions()).ConfigureAwait(false);
+        var timeline = byCategory == true
+            ? await reports.GetCategoryTimelineAsync(day, time.LocalTimeZone, time.GetUtcNow(), settings.Current.Categories ?? [], cancellationToken, settings.Current.ToAfterHoursOptions()).ConfigureAwait(false)
+            : await reports.GetTimelineAsync(day, time.LocalTimeZone, time.GetUtcNow(), cancellationToken: cancellationToken, afterHours: settings.Current.ToAfterHoursOptions()).ConfigureAwait(false);
         return TypedResults.Ok(TimelineDto.Create(timeline, time.LocalTimeZone));
     }
 
@@ -238,6 +258,117 @@ public static partial class TimeglassApi
         var summary = await reports.GetRangeSummaryAsync(firstDay, lastDay, time.LocalTimeZone, time.GetUtcNow(), cancellationToken: cancellationToken, afterHours: settings.Current.ToAfterHoursOptions()).ConfigureAwait(false);
         var colors = await reports.GetAppColorsAsync([.. summary.Apps.Select(a => a.App.Key), .. summary.Days.SelectMany(d => d.Apps.Select(a => a.App.Key))], cancellationToken).ConfigureAwait(false);
         return TypedResults.Ok(RangeSummaryDto.Create(summary, colors));
+    }
+
+    private static async Task<Results<Ok<RangeSummaryDto>, ValidationProblem>> GetCategoryRangeSummaryAsync(
+        [Description("First local date, yyyy-MM-dd. Required.")] string? from,
+        [Description("Last local date, yyyy-MM-dd, included. Required.")] string? to,
+        [FromServices] IReportingQueries reports,
+        [FromServices] ISettingsStore settings,
+        [FromServices] TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var hasFrom = TryParseDate(from, out var first);
+        var hasTo = TryParseDate(to, out var last);
+        if (!hasFrom)
+        {
+            errors[nameof(from)] = [DateError(from)];
+        }
+        if (!hasTo)
+        {
+            errors[nameof(to)] = [DateError(to)];
+        }
+        if (hasFrom && hasTo && (last < first || last.DayNumber - first.DayNumber + 1 > RangeSummaries.MaxDays
+            || last == DateOnly.MaxValue))
+        {
+            errors[nameof(to)] = [$"The range must be in order and at most {RangeSummaries.MaxDays} days."];
+        }
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var result = await reports.GetCategoryRangeSummaryAsync(first, last, time.LocalTimeZone, time.GetUtcNow(),
+            settings.Current.Categories ?? [], cancellationToken, settings.Current.ToAfterHoursOptions()).ConfigureAwait(false);
+        var colors = await reports.GetAppColorsAsync([.. result.Apps.Select(a => a.App.Key), .. result.Days.SelectMany(d => d.Apps.Select(a => a.App.Key))], cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(RangeSummaryDto.Create(result, colors));
+    }
+
+    private static async Task<Results<Ok<RangeSummaryDto>, ValidationProblem>> GetCategoryApplicationsAsync(
+        [Description("First local date, yyyy-MM-dd. Required.")] string? from,
+        [Description("Last local date, yyyy-MM-dd, included. Required.")] string? to,
+        [Description("Name of the category, or Ungrouped.")] string? category,
+        [FromServices] IReportingQueries reports,
+        [FromServices] ISettingsStore settings,
+        [FromServices] TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var categories = settings.Current.Categories ?? [];
+        var errors = CategoryRangeErrors(from, to, category, categories, out var first, out var last);
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var result = await reports.GetCategoryApplicationsAsync(first, last, time.LocalTimeZone, time.GetUtcNow(),
+            categories, category!, cancellationToken, settings.Current.ToAfterHoursOptions()).ConfigureAwait(false);
+        var colors = await reports.GetAppColorsAsync([.. result.Apps.Select(a => a.App.Key), .. result.Days.SelectMany(d => d.Apps.Select(a => a.App.Key))], cancellationToken).ConfigureAwait(false);
+        return TypedResults.Ok(RangeSummaryDto.Create(result, colors));
+    }
+
+    private static async Task<Results<Ok<CategoryAppTitlesDto>, ValidationProblem>> GetCategoryApplicationTitlesAsync(
+        [Description("First local date, yyyy-MM-dd. Required.")] string? from,
+        [Description("Last local date, yyyy-MM-dd, included. Required.")] string? to,
+        [Description("Name of the category, or Ungrouped.")] string? category,
+        [Description("The application's key.")] string? appKey,
+        [FromServices] IReportingQueries reports,
+        [FromServices] ISettingsStore settings,
+        [FromServices] TimeProvider time,
+        CancellationToken cancellationToken)
+    {
+        var categories = settings.Current.Categories ?? [];
+        var errors = CategoryRangeErrors(from, to, category, categories, out var first, out var last);
+        if (string.IsNullOrWhiteSpace(appKey))
+        {
+            errors[nameof(appKey)] = ["An application key is required."];
+        }
+        if (errors.Count > 0)
+        {
+            return TypedResults.ValidationProblem(errors);
+        }
+
+        var result = await reports.GetCategoryApplicationTitlesAsync(first, last, time.LocalTimeZone, time.GetUtcNow(),
+            categories, category!, appKey!, cancellationToken, settings.Current.ToAfterHoursOptions()).ConfigureAwait(false);
+        return TypedResults.Ok(CategoryAppTitlesDto.Create(result));
+    }
+
+    private static Dictionary<string, string[]> CategoryRangeErrors(
+        string? from, string? to, string? category, IReadOnlyList<CategorySetting> categories,
+        out DateOnly first, out DateOnly last)
+    {
+        var errors = new Dictionary<string, string[]>(StringComparer.Ordinal);
+        var hasFrom = TryParseDate(from, out first);
+        var hasTo = TryParseDate(to, out last);
+        if (!hasFrom)
+        {
+            errors[nameof(from)] = [DateError(from)];
+        }
+        if (!hasTo)
+        {
+            errors[nameof(to)] = [DateError(to)];
+        }
+        if (hasFrom && hasTo && (last < first || last.DayNumber - first.DayNumber + 1 > RangeSummaries.MaxDays || last == DateOnly.MaxValue))
+        {
+            errors[nameof(to)] = [$"The range must be in order and at most {RangeSummaries.MaxDays} days."];
+        }
+
+        if (string.IsNullOrWhiteSpace(category) || (!string.Equals(category, "Ungrouped", StringComparison.OrdinalIgnoreCase)
+            && !categories.Any(c => string.Equals(c.Name, category, StringComparison.OrdinalIgnoreCase))))
+        {
+            errors[nameof(category)] = ["The category no longer exists. Check your categories in Settings."];
+        }
+        return errors;
     }
 
     private static async Task<Ok<StatusDto>> GetStatusAsync(

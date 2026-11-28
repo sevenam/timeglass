@@ -1,5 +1,6 @@
 import { formatDuration } from '../format.ts';
 import { Link } from '../Link.tsx';
+import { AWAY_CATEGORY_KEY } from '../categories/categoryKeys.ts';
 import { paths } from '../router.ts';
 import type { AppShare } from './appShares.ts';
 
@@ -10,6 +11,9 @@ interface AppShareListProps {
    * (the week view), the apps aren't links.
    */
   date?: string;
+  byCategory?: boolean;
+  categoryHref?: (name: string) => string;
+  appHref?: (key: string) => string;
 }
 
 /**
@@ -17,15 +21,23 @@ interface AppShareListProps {
  * are the same element: a screen reader reads app, time and share per row, and the bars are only
  * decoration for sighted users. The longest app fills the bar track, so short apps stay visible.
  */
-export function AppShareList({ rows, date }: AppShareListProps) {
+export function AppShareList({
+  rows,
+  date,
+  byCategory = false,
+  categoryHref,
+  appHref,
+}: AppShareListProps) {
   const longest = Math.max(...rows.map((r) => r.durationMs), 1);
 
   return (
     <table className="app-shares">
-      <caption className="visually-hidden">Active time per app, longest first</caption>
+      <caption className="visually-hidden">
+        {byCategory ? 'Tracked time per category' : 'Active time per app'}, longest first
+      </caption>
       <thead className="visually-hidden">
         <tr>
-          <th scope="col">App</th>
+          <th scope="col">{byCategory ? 'Category' : 'App'}</th>
           <th scope="col">Time</th>
           <th scope="col">Share</th>
         </tr>
@@ -39,7 +51,15 @@ export function AppShareList({ rows, date }: AppShareListProps) {
                 style={{ backgroundColor: row.color }}
                 aria-hidden="true"
               />
-              {date === undefined ? (
+              {categoryHref && row.key !== AWAY_CATEGORY_KEY ? (
+                <Link href={categoryHref(row.name)} className="app-shares__link">
+                  {row.name}
+                </Link>
+              ) : appHref ? (
+                <Link href={appHref(row.key)} className="app-shares__link">
+                  {row.name}
+                </Link>
+              ) : date === undefined ? (
                 row.name
               ) : (
                 <Link href={paths.app(date, row.key)} className="app-shares__link">

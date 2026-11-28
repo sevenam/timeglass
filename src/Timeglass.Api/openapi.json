@@ -68,6 +68,14 @@
               "type": "string",
               "format": "date"
             }
+          },
+          {
+            "name": "byCategory",
+            "in": "query",
+            "description": "Include the matching category on each active block.",
+            "schema": {
+              "type": "boolean"
+            }
           }
         ],
         "responses": {
@@ -182,6 +190,184 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RangeSummaryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/range/categories": {
+      "get": {
+        "tags": [
+          "Ranges"
+        ],
+        "summary": "Totals per category over a range of days",
+        "description": "Includes tracked away time as a built-in category. Category shares are of active plus away time.",
+        "operationId": "GetCategoryRangeSummary",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "First local date, yyyy-MM-dd. Required.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Last local date, yyyy-MM-dd, included. Required.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RangeSummaryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/range/category-applications": {
+      "get": {
+        "tags": [
+          "Ranges"
+        ],
+        "summary": "Applications contributing to one category over a range of days",
+        "operationId": "GetCategoryApplications",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "First local date, yyyy-MM-dd. Required.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Last local date, yyyy-MM-dd, included. Required.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Name of the category, or Ungrouped.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RangeSummaryDto"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpValidationProblemDetails"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/range/category-application-titles": {
+      "get": {
+        "tags": [
+          "Ranges"
+        ],
+        "summary": "Titles contributing to one application's time in a category",
+        "operationId": "GetCategoryApplicationTitles",
+        "parameters": [
+          {
+            "name": "from",
+            "in": "query",
+            "description": "First local date, yyyy-MM-dd. Required.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "to",
+            "in": "query",
+            "description": "Last local date, yyyy-MM-dd, included. Required.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Name of the category, or Ungrouped.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "appKey",
+            "in": "query",
+            "description": "The application's key.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CategoryAppTitlesDto"
                 }
               }
             }
@@ -596,17 +782,17 @@
         "type": "object",
         "properties": {
           "app": {
-            "description": "The app.",
+            "description": "The app or category.",
             "$ref": "#/components/schemas/AppDto"
           },
           "durationMs": {
             "type": "integer",
-            "description": "Active time in the app, in milliseconds.",
+            "description": "Time in the app or category, in milliseconds.",
             "format": "int64"
           },
           "share": {
             "type": "number",
-            "description": "Exact fraction of the active time, between 0 and 1.",
+            "description": "Exact fraction of active time, or active plus away for categories, between 0 and 1.",
             "format": "double"
           },
           "percent": {
@@ -619,7 +805,55 @@
             "description": "Persistent display colour for the app."
           }
         },
-        "description": "One app's share of the active time."
+        "description": "One app's or category's share of the time."
+      },
+      "CategoryAppTitlesDto": {
+        "required": [
+          "app",
+          "totalMs",
+          "titles"
+        ],
+        "type": "object",
+        "properties": {
+          "app": {
+            "description": "The application.",
+            "$ref": "#/components/schemas/AppDto"
+          },
+          "totalMs": {
+            "type": "integer",
+            "description": "Active time assigned to the category, in milliseconds.",
+            "format": "int64"
+          },
+          "titles": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TitleTotalDto"
+            },
+            "description": "Titles and time without an available title, longest first."
+          }
+        },
+        "description": "One application's titles assigned to a category over a range."
+      },
+      "CategoryDto": {
+        "required": [
+          "name",
+          "keywords"
+        ],
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Category name."
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Case-insensitive substrings to match."
+          }
+        },
+        "description": "A named category of keywords, matched in the order categories are listed."
       },
       "DaySummaryDto": {
         "required": [
@@ -732,7 +966,7 @@
             "items": {
               "$ref": "#/components/schemas/AppTotalDto"
             },
-            "description": "Every app used that day, longest first; shares are of the whole day."
+            "description": "Every app used that day, or categories including away time; longest first."
           }
         },
         "description": "One day in a range."
@@ -1010,7 +1244,7 @@
             "items": {
               "$ref": "#/components/schemas/AppTotalDto"
             },
-            "description": "Active time per app over the whole range, longest first."
+            "description": "Active time per app, or categories including away time; longest first."
           }
         },
         "description": "Totals per day and per app over a range of local days."
@@ -1089,6 +1323,16 @@
             ],
             "description": "Minutes after local midnight that work hours end, after the start and at most 1439; null keeps the current value (write).",
             "format": "int32"
+          },
+          "categories": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/CategoryDto"
+            },
+            "description": "Ordered categories of keywords, or null to leave them unchanged."
           },
           "discardAfterHoursReturns": {
             "type": [
@@ -1178,7 +1422,8 @@
           "start",
           "end",
           "durationMs",
-          "isOpen"
+          "isOpen",
+          "category"
         ],
         "type": "object",
         "properties": {
@@ -1215,6 +1460,17 @@
           "isOpen": {
             "type": "boolean",
             "description": "True if the block is still running."
+          },
+          "category": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "description": "Category for category timelines, otherwise null.",
+                "$ref": "#/components/schemas/AppDto"
+              }
+            ]
           }
         },
         "description": "A stretch of time in one app, or away; intervals a few seconds apart are merged."

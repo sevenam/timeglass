@@ -27,6 +27,65 @@ function dayRows(table: HTMLElement) {
 }
 
 describe('WeekView', () => {
+  it('shows category totals and bars when the category view is selected', async () => {
+    const range = rangeSummary(monday, '2026-11-08');
+    const renamed = (app: (typeof range.apps)[number], index: number) => ({
+      ...app,
+      app:
+        index === 0
+          ? { key: 'category-0', name: 'Investigator' }
+          : { key: 'category-20', name: 'Prizm' },
+    });
+    const away = (durationMs: number) => ({
+      app: { key: 'away', name: 'Away' },
+      durationMs,
+      share: 0,
+      percent: 0,
+    });
+    server.use(
+      http.get('/api/range/categories', () =>
+        HttpResponse.json({
+          ...range,
+          apps: [...range.apps.slice(0, 2).map(renamed), away(range.awayMs)],
+          days: range.days.map((day) => ({
+            ...day,
+            apps: [
+              ...day.apps.slice(0, 2).map(renamed),
+              ...(day.awayMs > 0 ? [away(day.awayMs)] : []),
+            ],
+          })),
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithApi(<WeekView date={demoDate} today={demoDate} />);
+    await dayTable();
+    await user.click(screen.getByRole('button', { name: 'Category' }));
+    const table = await screen.findByRole('table', { name: /each day.s categories/ });
+    expect(dayRows(table)[0]?.bar).toContain('Investigator');
+    expect(dayRows(table)[0]?.bar).toContain('Away');
+    expect(dayRows(table)[0]?.time).toBe('8h 5m');
+    const categories = screen.getByRole('table', {
+      name: 'Tracked time per category, longest first',
+    });
+    expect(categories).toHaveTextContent('Investigator');
+    expect(within(categories).queryByRole('link', { name: 'Away' })).not.toBeInTheDocument();
+    const colors = ['category-0', 'category-20'].map(
+      (key) =>
+        categories.querySelector<HTMLElement>(`tr[data-app="${key}"] .app-shares__swatch`)?.style
+          .backgroundColor,
+    );
+    expect(colors[0]).toBeTruthy();
+    expect(colors[1]).toBeTruthy();
+    expect(colors[0]).not.toBe(colors[1]);
+    const segments = table.querySelectorAll<HTMLElement>(
+      'tr[data-date="2026-11-02"] .week-days__segment',
+    );
+    expect([...segments].slice(0, 2).map((segment) => segment.style.backgroundColor)).toEqual(
+      colors,
+    );
+    expect(Number.parseFloat(segments[2]?.style.width ?? '')).toBeCloseTo((65 / 485) * 100);
+  });
   it('asks for the week from Monday to Sunday, whatever day it is given', async () => {
     let asked = '';
     server.use(

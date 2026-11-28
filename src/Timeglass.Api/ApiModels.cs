@@ -17,10 +17,10 @@ public sealed record AppDto(string Key, string Name)
     internal static AppDto Create(AppIdentity app) => new(app.Key, app.DisplayName);
 }
 
-/// <summary>One app's share of the active time.</summary>
-/// <param name="App">The app.</param>
-/// <param name="DurationMs">Active time in the app, in milliseconds.</param>
-/// <param name="Share">Exact fraction of the active time, between 0 and 1.</param>
+/// <summary>One app's or category's share of the time.</summary>
+/// <param name="App">The app or category.</param>
+/// <param name="DurationMs">Time in the app or category, in milliseconds.</param>
+/// <param name="Share">Exact fraction of active time, or active plus away for categories, between 0 and 1.</param>
 /// <param name="Percent">Whole percentage; the percentages of one list add up to 100.</param>
 /// <param name="Color">Persistent display colour for the app.</param>
 public sealed record AppTotalDto(AppDto App, long DurationMs, double Share, int Percent, string Color)
@@ -93,13 +93,15 @@ public sealed record TimelineDto(DateOnly Date, DateTimeOffset Start, DateTimeOf
 /// <param name="End">End (exclusive).</param>
 /// <param name="DurationMs">Time tracked in the block, in milliseconds: end minus start, less the short gaps merged over.</param>
 /// <param name="IsOpen">True if the block is still running.</param>
+/// <param name="Category">Category for category timelines, otherwise null.</param>
 public sealed record TimelineBlockDto(
     ActivityKind Kind,
     AppDto? App,
     DateTimeOffset Start,
     DateTimeOffset End,
     long DurationMs,
-    bool IsOpen)
+    bool IsOpen,
+    AppDto? Category)
 {
     internal static TimelineBlockDto Create(TimelineBlock block, TimeZoneInfo zone) => new(
         block.Kind.ToDto(),
@@ -107,7 +109,8 @@ public sealed record TimelineBlockDto(
         block.Start.In(zone),
         block.End.In(zone),
         block.Duration.ToMs(),
-        block.IsOpen);
+        block.IsOpen,
+        block.Category is null ? null : AppDto.Create(block.Category));
 }
 
 /// <summary>Where the time in one app went on one local day, by window title.</summary>
@@ -144,6 +147,18 @@ public sealed record AppDayDto(
 /// <param name="Percent">Whole percentage; the titles add up to 100.</param>
 public sealed record TitleTotalDto(string? Title, long DurationMs, double Share, int Percent);
 
+/// <summary>One application's titles assigned to a category over a range.</summary>
+/// <param name="App">The application.</param>
+/// <param name="TotalMs">Active time assigned to the category, in milliseconds.</param>
+/// <param name="Titles">Titles and time without an available title, longest first.</param>
+public sealed record CategoryAppTitlesDto(AppDto App, long TotalMs, IReadOnlyList<TitleTotalDto> Titles)
+{
+    internal static CategoryAppTitlesDto Create(TitleBreakdown breakdown) => new(
+        AppDto.Create(breakdown.App),
+        breakdown.Total.ToMs(),
+        [.. breakdown.Titles.Select(t => new TitleTotalDto(t.Title, t.Duration.ToMs(), t.Share, t.Percent))]);
+}
+
 /// <summary>Totals per day and per app over a range of local days.</summary>
 /// <param name="From">First local date.</param>
 /// <param name="To">Last local date (included).</param>
@@ -152,7 +167,7 @@ public sealed record TitleTotalDto(string? Title, long DurationMs, double Share,
 /// <param name="ActiveMs">Total active time, in milliseconds.</param>
 /// <param name="AwayMs">Total away time, in milliseconds.</param>
 /// <param name="Days">One entry per day in date order, including days without any time.</param>
-/// <param name="Apps">Active time per app over the whole range, longest first.</param>
+/// <param name="Apps">Active time per app, or categories including away time; longest first.</param>
 public sealed record RangeSummaryDto(
     DateOnly From,
     DateOnly To,
@@ -180,7 +195,7 @@ public sealed record RangeSummaryDto(
 /// <param name="End">First instant of the next day (exclusive).</param>
 /// <param name="ActiveMs">Active time, in milliseconds.</param>
 /// <param name="AwayMs">Away time, in milliseconds.</param>
-/// <param name="Apps">Every app used that day, longest first; shares are of the whole day.</param>
+/// <param name="Apps">Every app used that day, or categories including away time; longest first.</param>
 public sealed record DayTotalDto(
     DateOnly Date,
     DateTimeOffset Start,

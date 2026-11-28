@@ -46,8 +46,8 @@ export function trendSeries(
   { limit = 'all', appKey = null }: { limit?: AppLimit; appKey?: string | null } = {},
 ): Trend {
   const unit = range.days.length > DAILY_LIMIT ? 'week' : 'day';
-  const groups = groupDays(range.days, unit);
-  const buckets = groups.map((g) => ({
+  const categories = groupDays(range.days, unit);
+  const buckets = categories.map((g) => ({
     start: g[0]?.date ?? '',
     end: g.at(-1)?.date ?? '',
     days: g.length,
@@ -66,7 +66,7 @@ export function trendSeries(
     name: a.app.name,
     color: a.color,
     totalMs: a.durationMs,
-    values: groups.map((g) => {
+    values: categories.map((g) => {
       const sum = g.reduce(
         (total, day) => total + (day.apps.find((d) => d.app.key === a.app.key)?.durationMs ?? 0),
         0,
@@ -83,22 +83,22 @@ function groupDays(days: readonly DayTotalDto[], unit: 'day' | 'week'): DayTotal
   if (unit === 'day') {
     return days.map((d) => [d]);
   }
-  const groups: DayTotalDto[][] = [];
+  const categories: DayTotalDto[][] = [];
   let current: DayTotalDto[] = [];
   let currentWeek = '';
   for (const day of days) {
     const week = weekStart(day.date);
     if (week !== currentWeek && current.length > 0) {
-      groups.push(current);
+      categories.push(current);
       current = [];
     }
     currentWeek = week;
     current.push(day);
   }
   if (current.length > 0) {
-    groups.push(current);
+    categories.push(current);
   }
-  return groups;
+  return categories;
 }
 
 /**

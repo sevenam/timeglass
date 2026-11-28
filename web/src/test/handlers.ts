@@ -1,6 +1,14 @@
 import { http, HttpResponse } from 'msw';
 import type { PauseDuration, SettingsDto, ValidationProblemDetails } from '../api/client.ts';
-import { appDay, daySummary, rangeSummary, settings, status, timeline } from './fixtures.ts';
+import {
+  appDay,
+  categoryRangeSummary,
+  daySummary,
+  rangeSummary,
+  settings,
+  status,
+  timeline,
+} from './fixtures.ts';
 
 const isDate = (value: unknown): value is string =>
   typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -72,6 +80,23 @@ export const handlers = [
       return badRequest('from', 'Give from and to as yyyy-MM-dd, from no later than to.');
     }
     return HttpResponse.json(rangeSummary(from, to));
+  }),
+  http.get('/api/range/categories', ({ request }) => {
+    const url = new URL(request.url);
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    if (!isDate(from) || !isDate(to) || from > to) {
+      return badRequest('from', 'Give from and to as yyyy-MM-dd, from no later than to.');
+    }
+    return HttpResponse.json(categoryRangeSummary(from, to));
+  }),
+  http.get('/api/range/category-applications', ({ request }) => {
+    const url = new URL(request.url);
+    const from = url.searchParams.get('from');
+    const to = url.searchParams.get('to');
+    return isDate(from) && isDate(to)
+      ? HttpResponse.json(rangeSummary(from, to))
+      : badRequest('from', 'Give from and to as yyyy-MM-dd.');
   }),
   http.get('/api/settings', () => HttpResponse.json(settings())),
   http.put('/api/settings', async ({ request }) =>

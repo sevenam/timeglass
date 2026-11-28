@@ -37,9 +37,18 @@ public static class TitleBreakdowns
         string appKey,
         DateTimeOffset from,
         DateTimeOffset to,
-        DateTimeOffset now)
+        DateTimeOffset now) => BuildWithRetained(intervals, appKey, from, to, now, []);
+
+    internal static TitleBreakdown BuildWithRetained(
+        IEnumerable<ActivityInterval> intervals,
+        string appKey,
+        DateTimeOffset from,
+        DateTimeOffset to,
+        DateTimeOffset now,
+        IEnumerable<RolledUpTotal> retained)
     {
         ArgumentNullException.ThrowIfNull(intervals);
+        ArgumentNullException.ThrowIfNull(retained);
         ArgumentException.ThrowIfNullOrEmpty(appKey);
 
         AppIdentity? app = null;
@@ -78,6 +87,24 @@ public static class TitleBreakdowns
             {
                 perTitle[interval.Title] = perTitle.GetValueOrDefault(interval.Title) + length;
             }
+        }
+
+        foreach (var entry in retained)
+        {
+            var identity = entry.App ?? AppIdentity.Unknown;
+            if (entry.Kind != IntervalKind.Active || identity.Key != appKey)
+            {
+                continue;
+            }
+
+            if (app is null || entry.First > lastSeen)
+            {
+                app = identity;
+                lastSeen = entry.First;
+            }
+
+            total += entry.Duration;
+            untitled += entry.Duration;
         }
 
         var groups = perTitle

@@ -1,8 +1,11 @@
 import { useId, useState } from 'react';
-import type { AppDayDto } from '../api/client.ts';
+import { useQueryClient } from '@tanstack/react-query';
+import type { AppDayDto, DaySummaryDto } from '../api/client.ts';
 import { errorMessage } from '../api/errors.ts';
-import { useAppDay } from '../api/queries.ts';
-import { OTHER_COLOR } from '../day/appColor.ts';
+import { queryKeys, useAppDay } from '../api/queries.ts';
+import { appColor } from '../day/appColor.ts';
+import { appShares } from '../day/appShares.ts';
+import { DayTimeline } from '../day/DayTimeline.tsx';
 import { formatDuration, formatLongDate } from '../format.ts';
 import { Link } from '../Link.tsx';
 import { paths } from '../router.ts';
@@ -24,6 +27,10 @@ interface AppViewProps {
  */
 export function AppView({ date, appKey, isToday = false }: AppViewProps) {
   const appDay = useAppDay(date, appKey);
+  const summary = useQueryClient().getQueryData<DaySummaryDto>(queryKeys.daySummary(date));
+  const color = summary
+    ? (appShares(summary.apps).find((row) => row.key === appKey)?.color ?? appColor(appKey))
+    : (appDay.data?.color ?? appColor(appKey));
   const name = appDay.data?.app.name ?? appKey;
   const longDate = formatLongDate(date);
 
@@ -35,11 +42,7 @@ export function AppView({ date, appKey, isToday = false }: AppViewProps) {
         </Link>
       </p>
       <h2 id="app-day-heading">
-        <span
-          className="app-day__swatch"
-          style={{ backgroundColor: appDay.data?.color ?? OTHER_COLOR }}
-          aria-hidden="true"
-        />
+        <span className="app-day__swatch" style={{ backgroundColor: color }} aria-hidden="true" />
         {name}
       </h2>
       <p className="app-day__date">{isToday ? `Today, ${longDate}` : longDate}</p>
@@ -70,6 +73,12 @@ export function AppView({ date, appKey, isToday = false }: AppViewProps) {
               </div>
             )}
           </dl>
+          <h3>When</h3>
+          <DayTimeline
+            date={date}
+            colorFor={() => color}
+            includeBlock={(block) => block.kind === 'active' && block.app?.key === appKey}
+          />
           {hasNoTitles(appDay.data) ? (
             <p className="app-day__empty">
               No window titles were recorded for {name}, so its time can&apos;t be split by mail,
@@ -77,7 +86,7 @@ export function AppView({ date, appKey, isToday = false }: AppViewProps) {
               apps excluded from it.
             </p>
           ) : (
-            <TitleList day={appDay.data} />
+            <TitleList day={appDay.data} color={color} />
           )}
         </>
       )}
@@ -85,14 +94,21 @@ export function AppView({ date, appKey, isToday = false }: AppViewProps) {
   );
 }
 
-function TitleList({ day }: { day: AppDayDto }) {
+export function TitleList({
+  day,
+  missingTitleLabel = 'No title recorded',
+  color = day.color ?? appColor(day.app.key),
+}: {
+  day: Pick<AppDayDto, 'app' | 'titles'> & { color?: string | null };
+  missingTitleLabel?: string;
+  color?: string;
+}) {
   const [query, setQuery] = useState('');
   const searchId = useId();
   const rows = filterTitles(day.titles, query);
   const total = countTitles(day.titles);
   const filtering = query.trim() !== '';
   const longest = Math.max(...day.titles.map((t) => t.durationMs), 1);
-  const color = day.color ?? OTHER_COLOR;
 
   return (
     <>
@@ -139,7 +155,7 @@ function TitleList({ day }: { day: AppDayDto }) {
               {rows.map((row) => (
                 <TitleRowView
                   key={row.title ?? '\0none'}
-                  label={row.title ?? 'No title recorded'}
+                  label={row.title ?? missingTitleLabel}
                   muted={row.title === null}
                   title={row.title ?? undefined}
                   durationMs={row.durationMs}

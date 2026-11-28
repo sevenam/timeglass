@@ -1,7 +1,8 @@
 import { screen, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import userEvent from '@testing-library/user-event';
 import type { DaySummaryDto } from '../api/client.ts';
-import { daySummary, demoDate } from '../test/fixtures.ts';
+import { daySummary, demoDate, timeline } from '../test/fixtures.ts';
 import { renderWithApi } from '../test/render.tsx';
 import { server } from '../test/server.ts';
 import { DayView } from './DayView.tsx';
@@ -19,6 +20,133 @@ function totals() {
 }
 
 describe('DayView', () => {
+  it('colours the timeline by category, including away time', async () => {
+    server.use(
+      http.get('/api/range/categories', () =>
+        HttpResponse.json({
+          from: demoDate,
+          to: demoDate,
+          start: '',
+          end: '',
+          activeMs: 60000,
+          awayMs: 60000,
+          days: [],
+          apps: [
+            {
+              app: { key: 'category-0', name: 'Investigator' },
+              durationMs: 60000,
+              share: 1,
+              percent: 100,
+              color: 'hsl(0 75% 50%)',
+            },
+            {
+              app: { key: 'category-1', name: 'Other work' },
+              durationMs: 60000,
+              share: 0.5,
+              percent: 50,
+              color: 'hsl(120 75% 50%)',
+            },
+            {
+              app: { key: 'away', name: 'Away' },
+              durationMs: 60000,
+              share: 0.5,
+              percent: 50,
+              color: 'hsl(220 9% 60%)',
+            },
+          ],
+        }),
+      ),
+      http.get('/api/days/:date/timeline', ({ request }) => {
+        const byCategory = new URL(request.url).searchParams.get('byCategory') === 'true';
+        const data = timeline();
+        return HttpResponse.json({
+          ...data,
+          blocks: data.blocks.map((block, index) => ({
+            ...block,
+            category:
+              byCategory && block.kind === 'active'
+                ? index === 6
+                  ? { key: 'category-1', name: 'Other work' }
+                  : { key: 'category-0', name: 'Investigator' }
+                : null,
+          })),
+        });
+      }),
+    );
+    const user = userEvent.setup();
+    renderWithApi(<DayView date={demoDate} />);
+    await screen.findByRole('table');
+    await user.click(screen.getByRole('button', { name: 'Category' }));
+    expect(screen.getByRole('button', { name: 'Category' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    const table = await screen.findByRole('table', {
+      name: 'Tracked time per category, longest first',
+    });
+
+    expect(within(table).getByText('Investigator')).toBeInTheDocument();
+    const lane = await screen.findByRole('group', { name: /Timeline of the day/ });
+    const groupSwatch = table.querySelector<HTMLElement>(
+      'tr[data-app="category-0"] .app-shares__swatch',
+    );
+    const awaySwatch = table.querySelector<HTMLElement>('tr[data-app="away"] .app-shares__swatch');
+    expect(lane.querySelector<HTMLElement>('[data-app="vscode"]')?.style.backgroundColor).toBe(
+      groupSwatch?.style.backgroundColor,
+    );
+    const codeBlocks = lane.querySelectorAll<HTMLElement>('[data-app="vscode"]');
+    expect(codeBlocks[1]?.style.backgroundColor).toBe(
+      table.querySelector<HTMLElement>('tr[data-app="category-1"] .app-shares__swatch')?.style
+        .backgroundColor,
+    );
+    expect(lane.querySelector<HTMLElement>('[data-app="away"]')?.style.backgroundColor).toBe(
+      awaySwatch?.style.backgroundColor,
+    );
+    await user.click(screen.getByRole('button', { name: 'Application' }));
+    expect(screen.getByRole('button', { name: 'Application' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(
+      screen.getByRole('table', { name: 'Active time per app, longest first' }),
+    ).toBeInTheDocument();
+  });
+
+  it('lets an away-only day be viewed as a category without an application link', async () => {
+    useSummary({
+      ...daySummary(),
+      activeMs: 0,
+      awayMs: 60000,
+      firstActivity: null,
+      lastActivity: null,
+      workdayMs: 0,
+      apps: [],
+    });
+    server.use(
+      http.get('/api/range/categories', () =>
+        HttpResponse.json({
+          from: demoDate,
+          to: demoDate,
+          start: '',
+          end: '',
+          activeMs: 0,
+          awayMs: 60000,
+          days: [],
+          apps: [{ app: { key: 'away', name: 'Away' }, durationMs: 60000, share: 1, percent: 100 }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithApi(<DayView date={demoDate} />);
+    expect(await screen.findByText(/No active time was tracked/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Category' }));
+    const table = await screen.findByRole('table', {
+      name: 'Tracked time per category, longest first',
+    });
+    expect(table).toHaveTextContent('Away');
+    expect(table).toHaveTextContent('100%');
+    expect(within(table).queryByRole('link', { name: 'Away' })).not.toBeInTheDocument();
+  });
   it('shows a loading state until the summary arrives', async () => {
     renderWithApi(<DayView date={demoDate} />);
 
@@ -156,7 +284,14 @@ describe('DayView', () => {
   });
 
   it('words the empty state for today', async () => {
-    useSummary({ ...daySummary(), activeMs: 0, firstActivity: null, lastActivity: null, apps: [] });
+    useSummary({
+      ...daySummary(),
+      activeMs: 0,
+      awayMs: 0,
+      firstActivity: null,
+      lastActivity: null,
+      apps: [],
+    });
 
     renderWithApi(<DayView date={demoDate} today={demoDate} />);
 

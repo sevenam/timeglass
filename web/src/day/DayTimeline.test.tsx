@@ -115,7 +115,17 @@ describe('DayTimeline', () => {
     renderWithApi(<DayTimeline date={demoDate} colorFor={colorFor} />);
 
     await waitFor(() => expect(screen.queryByRole('status')).not.toBeInTheDocument());
-    expect(screen.queryByRole('group')).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /Timeline of the day/ })).not.toBeInTheDocument();
+  });
+
+  it('explains when a filtered day has no retained matching timeline', async () => {
+    server.use(
+      http.get('/api/days/:date/timeline', () => HttpResponse.json({ ...timeline(), blocks: [] })),
+    );
+    renderWithApi(<DayTimeline date={demoDate} colorFor={colorFor} includeBlock={() => true} />);
+    expect(
+      await screen.findByText('No matching timeline data is available for this day.'),
+    ).toBeInTheDocument();
   });
 
   it('shows an error when the timeline fails', async () => {
